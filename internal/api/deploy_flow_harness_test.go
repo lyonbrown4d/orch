@@ -12,7 +12,7 @@ import (
 	"github.com/arcgolabs/httpx"
 	"github.com/arcgolabs/httpx/adapter"
 	adapterfiber "github.com/arcgolabs/httpx/adapter/fiber"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/lyonbrown4d/orch/internal/api"
 	"github.com/lyonbrown4d/orch/internal/apiclient"
@@ -224,7 +224,7 @@ func newE2ELoader(t *testing.T) *loader.Loader {
 }
 
 func newE2EServerRuntime(logger *slog.Logger) (*fiber.App, httpx.ServerRuntime) {
-	fiberApp := fiber.New(fiber.Config{DisableStartupMessage: true})
+	fiberApp := fiber.New()
 	fiberAdapter := adapterfiber.New(fiberApp, adapter.HumaOptions{
 		Title:       "orch API test",
 		Version:     "test",
@@ -245,7 +245,7 @@ func startTestFiberServer(t *testing.T, app *fiber.App) string {
 	requireNoError(t, err, "listen")
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- app.Listener(ln)
+		errCh <- app.Listener(ln, fiber.ListenConfig{DisableStartupMessage: true})
 	}()
 	t.Cleanup(func() {
 		if err := app.Shutdown(); err != nil {

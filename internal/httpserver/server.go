@@ -8,7 +8,7 @@ import (
 
 	authhttp "github.com/arcgolabs/authx/http"
 	"github.com/arcgolabs/httpx"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/lyonbrown4d/orch/internal/config"
 	"github.com/lyonbrown4d/orch/internal/observability"

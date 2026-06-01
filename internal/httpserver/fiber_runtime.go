@@ -9,7 +9,7 @@ import (
 	"github.com/arcgolabs/httpx/adapter"
 	adapterfiber "github.com/arcgolabs/httpx/adapter/fiber"
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/lyonbrown4d/orch/internal/buildmeta"
 	"github.com/lyonbrown4d/orch/internal/config"
@@ -17,9 +17,7 @@ import (
 
 // newFiberAppAndRuntime wires Fiber + httpx with OpenAPI defaults and optional deploy-route auth.
 func newFiberAppAndRuntime(cfg config.Config, logger *slog.Logger, guard *authhttp.Guard) (*fiber.App, httpx.ServerRuntime) {
-	fiberApp := fiber.New(fiber.Config{
-		DisableStartupMessage: true,
-	})
+	fiberApp := fiber.New()
 	fiberAdapter := adapterfiber.New(fiberApp, adapter.HumaOptions{
 		Title:       "orch API",
 		Version:     buildmeta.Version(),

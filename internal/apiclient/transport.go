@@ -26,7 +26,7 @@ func (c *Client) request(ctx context.Context, method, path string, out any) erro
 	if err != nil {
 		return oopsx.B("cli", "apiclient").Wrapf(err, "%s %s", method, path)
 	}
-	if !resp.IsSuccess() {
+	if !resp.IsStatusSuccess() {
 		msg := strings.TrimSpace(string(resp.Bytes()))
 		return oopsx.B("cli", "apiclient").Errorf("%s %s: %s: %s", method, path, resp.Status(), msg)
 	}
@@ -51,7 +51,7 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 	if err != nil {
 		return oopsx.B("cli", "apiclient").Wrapf(err, "POST %s", path)
 	}
-	if !resp.IsSuccess() {
+	if !resp.IsStatusSuccess() {
 		msg := strings.TrimSpace(string(resp.Bytes()))
 		return oopsx.B("cli", "apiclient").Errorf("POST %s: %s: %s", path, resp.Status(), msg)
 	}

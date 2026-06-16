@@ -229,7 +229,7 @@ func (d *HTTPWorkerDispatcher) executeWorkerRaw(
 	if err != nil {
 		return nil, oopsx.B("task", "worker").Wrapf(err, "%s workload %q on node %q", action, workloadName, nodeID)
 	}
-	if !resp.IsSuccess() {
+	if !resp.IsStatusSuccess() {
 		msg := strings.TrimSpace(string(resp.Bytes()))
 		return nil, oopsx.B("task", "worker").Errorf("%s workload %q on node %q: %s: %s", action, workloadName, nodeID, resp.Status(), msg)
 	}

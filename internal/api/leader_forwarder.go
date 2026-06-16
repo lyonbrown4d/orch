@@ -113,7 +113,7 @@ func executeForwardedJSON(ctx context.Context, client clientxhttp.Client, method
 	if err != nil {
 		return forwardedResponse{}, oopsx.B("api", "raft").Wrapf(err, "forward request to raft leader")
 	}
-	return forwardedResponse{status: resp.Status(), body: resp.Bytes(), success: resp.IsSuccess()}, nil
+	return forwardedResponse{status: resp.Status(), body: resp.Bytes(), success: resp.IsStatusSuccess()}, nil
 }
 
 type forwardedResponse struct {

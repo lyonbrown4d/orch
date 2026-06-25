@@ -114,11 +114,19 @@ tasks:
 
 
   smoke:docker-raft-placement:
-    desc: "Run a Docker 3-node Raft cluster smoke for migrate, rebalance, and failover"
+    desc: "Run a Docker 3-node Raft placement deploy/ingress smoke with a shared Docker daemon"
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:docker-raft-placement-dind:
+    desc: "Run the placement Raft migrate/rebalance/failover smoke with one Docker-in-Docker daemon per node"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -RuntimeIsolation dind {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
   smoke:docker-raft-nextcloud:
     desc: "Run a Docker 3-node Raft cluster smoke with Nextcloud, Postgres, and Redis"
     cmds:

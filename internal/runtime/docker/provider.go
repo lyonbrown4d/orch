@@ -5,8 +5,10 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/arcgolabs/collectionx/list"
+	"github.com/cenkalti/backoff/v5"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -155,14 +157,23 @@ func (p *Provider) deployWorkloadContainer(ctx context.Context, cli *client.Clie
 	}
 	ApplyLocalMounts(hostCfg, localMounts)
 
-	containerID, err := p.createDockerContainer(ctx, cli, meta, w, name, ctrCfg, hostCfg)
-	if err != nil {
-		return err
-	}
-	if containerID == "" {
-		return nil
-	}
-	return p.dockerRunAfterCreate(ctx, cli, meta, w, name, containerID)
+	_, err = backoff.Retry(ctx, func() (struct{}, error) {
+		containerID, err := p.createDockerContainer(ctx, cli, meta, w, name, ctrCfg, hostCfg)
+		if err != nil {
+			return struct{}{}, backoff.Permanent(err)
+		}
+		if containerID == "" {
+			return struct{}{}, nil
+		}
+		if err := p.dockerRunAfterCreate(ctx, cli, meta, w, name, containerID); err != nil {
+			if isDockerMarkedForRemoval(err) {
+				return struct{}{}, err
+			}
+			return struct{}{}, backoff.Permanent(err)
+		}
+		return struct{}{}, nil
+	}, backoff.WithBackOff(backoff.NewConstantBackOff(200*time.Millisecond)), backoff.WithMaxTries(10))
+	return err
 }
 
 // ApplyLocalMounts injects local runtime volumes into Docker-compatible host config.
@@ -209,17 +220,32 @@ func (p *Provider) createDockerContainerAfterConflict(
 	ctrCfg *container.Config,
 	hostCfg *container.HostConfig,
 ) (string, error) {
-	ready, err := p.prepareExistingDockerContainer(ctx, cli, meta, w, name)
-	if err != nil || ready {
-		return "", err
-	}
-	createResp, err := cli.ContainerCreate(ctx, ctrCfg, hostCfg, nil, nil, name)
+	containerID, err := backoff.Retry(ctx, func() (string, error) {
+		ready, err := p.prepareExistingDockerContainer(ctx, cli, meta, w, name)
+		if err != nil {
+			return "", backoff.Permanent(err)
+		}
+		if ready {
+			return "", nil
+		}
+		createResp, err := cli.ContainerCreate(ctx, ctrCfg, hostCfg, nil, nil, name)
+		if err == nil {
+			return createResp.ID, nil
+		}
+		if cerrdefs.IsConflict(err) {
+			return "", err
+		}
+		return "", backoff.Permanent(err)
+	}, backoff.WithBackOff(backoff.NewConstantBackOff(200*time.Millisecond)), backoff.WithMaxTries(10))
 	if err != nil {
 		return "", oopsx.B("runtime", "docker").Wrapf(err, "docker create %q", name)
 	}
-	return createResp.ID, nil
+	return containerID, nil
 }
 
+func isDockerMarkedForRemoval(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "marked for removal")
+}
 func (p *Provider) dockerRunAfterCreate(ctx context.Context, cli *client.Client, meta deployv1.Metadata, w deployv1.Workload, name, containerID string) error {
 	removeFailed := func(stage string, cleanupErr error) {
 		if rmErr := cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true}); rmErr != nil {

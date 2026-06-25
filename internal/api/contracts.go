@@ -116,6 +116,31 @@ type ListAssignmentsOutput struct {
 	} `json:"body"`
 }
 
+// VolumeBindingItem is the public API representation of a local runtime volume attachment.
+type VolumeBindingItem struct {
+	Key        string               `json:"key"`
+	Metadata   deployv1.Metadata    `json:"metadata"`
+	Volume     string               `json:"volume"`
+	Workload   string               `json:"workload,omitempty"`
+	Target     string               `json:"target,omitempty"`
+	Node       string               `json:"node"`
+	Runtime    deployv1.RuntimeKind `json:"runtime"`
+	Source     string               `json:"source,omitempty"`
+	Persistent bool                 `json:"persistent"`
+	SizeBytes  int64                `json:"sizeBytes,omitempty"`
+	Status     string               `json:"status"`
+	Generation string               `json:"generation,omitempty"`
+	Error      string               `json:"error,omitempty"`
+	UpdatedAt  time.Time            `json:"updatedAt"`
+}
+
+// ListVolumesOutput is the response body envelope for GET PathV1Volumes.
+type ListVolumesOutput struct {
+	Body struct {
+		Items *list.List[VolumeBindingItem] `json:"items"`
+	} `json:"body"`
+}
+
 type AppItem struct {
 	Name               string    `json:"name"`
 	Namespace          string    `json:"namespace"`

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
+	"github.com/lyonbrown4d/orch/internal/volumemeta"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
 
@@ -92,6 +93,53 @@ func TestRaftApplyWorkloadAssignment(t *testing.T) {
 	}
 }
 
+func TestRaftApplyVolumeBinding(t *testing.T) {
+	svc := newStartedTestRaft(t, "node-fsm-volume")
+	waitRaftLeader(t, svc)
+
+	binding := volumeBindingFixture(volumemeta.BindingStatusBound)
+	if err := svc.ApplyVolumeBinding(context.Background(), binding); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := svc.GetVolumeBinding(volumemeta.BindingKey(binding.Metadata, binding.Workload, binding.Volume))
+	if !ok {
+		t.Fatal("volume binding not stored")
+	}
+	if got.Node != "node-a" || got.Status != volumemeta.BindingStatusBound || got.Source != "orch_ns1_demo_data" {
+		t.Fatalf("volume binding = %#v", got)
+	}
+}
+
+func TestRaftVolumeBindingSnapshotRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	dataDir := filepath.Join(t.TempDir(), "dragonboat")
+	raftAddr := reserveTestRaftAddr(t)
+	binding := volumeBindingFixture(volumemeta.BindingStatusReleased)
+
+	first := newStartedTestRaftWithDataDir(t, "node-fsm-volume-snapshot", true, raftAddr, dataDir)
+	waitRaftLeader(t, first)
+	if err := first.ApplyVolumeBinding(ctx, binding); err != nil {
+		t.Fatal(err)
+	}
+	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	if err := first.Stop(stopCtx); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	cancel()
+
+	second := newStartedTestRaftWithDataDir(t, "node-fsm-volume-snapshot", true, raftAddr, dataDir)
+	waitRaftLeader(t, second)
+	got, ok := second.GetVolumeBinding(volumemeta.BindingKey(binding.Metadata, binding.Workload, binding.Volume))
+	if !ok {
+		t.Fatal("volume binding not restored")
+	}
+	if got.Node != "node-a" || got.Status != volumemeta.BindingStatusReleased {
+		t.Fatalf("after restore = %#v", got)
+	}
+}
+
 func TestRaftAssignmentSnapshotRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	dataDir := filepath.Join(t.TempDir(), "dragonboat")
@@ -140,5 +188,20 @@ func assignmentFixture(status string) workloadmeta.Assignment {
 		Runtime:  deployv1.RuntimeDocker,
 		Artifact: "nginx",
 		Status:   status,
+	}
+}
+
+func volumeBindingFixture(status string) volumemeta.Binding {
+	meta := deployv1.Metadata{Name: "demo", Namespace: "ns1"}
+	return volumemeta.Binding{
+		Metadata:   meta,
+		Volume:     "data",
+		Workload:   "db",
+		Target:     "/data",
+		Node:       "node-a",
+		Runtime:    deployv1.RuntimeDocker,
+		Source:     "orch_ns1_demo_data",
+		Persistent: true,
+		Status:     status,
 	}
 }

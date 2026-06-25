@@ -77,6 +77,19 @@ func writeAssignmentsHuman(items *list.List[api.AssignmentItem]) error {
 	return writeTable(list.NewList("KEY", "NODE", "RUNTIME", "STATUS", "ARTIFACT", "ERROR"), rows)
 }
 
+func writeVolumesHuman(items *list.List[api.VolumeBindingItem]) error {
+	rows := list.NewGridWithCapacity[string](items.Len())
+	items.Range(func(_ int, v api.VolumeBindingItem) bool {
+		mount := nonEmpty(v.Workload)
+		if v.Target != "" {
+			mount += ":" + v.Target
+		}
+		rows.AddRow(v.Key, nonEmpty(v.Node), string(v.Runtime), statusBadge(v.Status), nonEmpty(v.Source), mount, nonEmpty(v.Error))
+		return true
+	})
+	return writeTable(list.NewList("KEY", "NODE", "RUNTIME", "STATUS", "SOURCE", "MOUNT", "ERROR"), rows)
+}
+
 func writeRuntimesHuman(items *list.List[api.RuntimeProviderItem]) error {
 	if items == nil {
 		return writeLine(viewMutedStyle.Render("No runtime providers reported."))

@@ -11,6 +11,7 @@ import (
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/nodecapacity"
+	"github.com/lyonbrown4d/orch/internal/volumemeta"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
@@ -20,6 +21,7 @@ const (
 	cmdUpsertDeployApp          = "upsert_deploy_app"
 	cmdDeleteDeployApp          = "delete_deploy_app"
 	cmdUpsertWorkloadAssignment = "upsert_workload_assignment"
+	cmdUpsertVolumeBinding      = "upsert_volume_binding"
 )
 
 // schedulingFSM holds replicated control-plane state (node capacity snapshots, etc.).
@@ -34,6 +36,7 @@ type fsmSnapshotState struct {
 	NodeCapacity    map[string]nodecapacity.Snapshot   `json:"nodeCapacity,omitempty"`
 	DeployApps      map[string]deployv1.App            `json:"deployApps,omitempty"`
 	Assignments     map[string]workloadmeta.Assignment `json:"assignments,omitempty"`
+	VolumeBindings  map[string]volumemeta.Binding      `json:"volumeBindings,omitempty"`
 }
 
 func (f *schedulingFSM) setNotifyDeploy(fn func()) {
@@ -84,6 +87,8 @@ func (f *schedulingFSM) applyPayloadLocked(data []byte) {
 		f.applyDeleteDeployApp(data)
 	case cmdUpsertWorkloadAssignment:
 		f.applyWorkloadAssignment(data)
+	case cmdUpsertVolumeBinding:
+		f.applyVolumeBinding(data)
 	}
 }
 
@@ -191,6 +196,43 @@ func normalizeAssignment(assignment workloadmeta.Assignment) (workloadmeta.Assig
 	return assignment, assignment.Key != ""
 }
 
+func (f *schedulingFSM) applyVolumeBinding(data []byte) {
+	var env struct {
+		Type    string             `json:"type"`
+		Binding volumemeta.Binding `json:"binding"`
+	}
+	if err := json.Unmarshal(data, &env); err != nil {
+		return
+	}
+	binding, ok := normalizeVolumeBinding(env.Binding)
+	if !ok {
+		return
+	}
+	if f.state.VolumeBindings == nil {
+		f.state.VolumeBindings = make(map[string]volumemeta.Binding)
+	}
+	f.state.VolumeBindings[binding.Key] = binding
+}
+
+func normalizeVolumeBinding(binding volumemeta.Binding) (volumemeta.Binding, bool) {
+	binding.Key = strings.TrimSpace(binding.Key)
+	binding.Metadata.Name = strings.TrimSpace(binding.Metadata.Name)
+	binding.Metadata.Namespace = strings.TrimSpace(binding.Metadata.Namespace)
+	binding.Volume = strings.TrimSpace(binding.Volume)
+	binding.Workload = strings.TrimSpace(binding.Workload)
+	binding.Target = strings.TrimSpace(binding.Target)
+	binding.Node = strings.TrimSpace(binding.Node)
+	binding.Source = strings.TrimSpace(binding.Source)
+	binding.Status = strings.TrimSpace(binding.Status)
+	if binding.Metadata.Name == "" || binding.Workload == "" || binding.Volume == "" {
+		return volumemeta.Binding{}, false
+	}
+	if binding.Key == "" {
+		binding.Key = volumemeta.BindingKey(binding.Metadata, binding.Workload, binding.Volume)
+	}
+	return binding, binding.Key != ""
+}
+
 func deployAppMapKey(m deployv1.Metadata) string {
 	return workloadmeta.NamespaceOrDefault(m.Namespace) + "/" + strings.TrimSpace(m.Name)
 }
@@ -239,6 +281,29 @@ func (f *schedulingFSM) getAssignment(key string) (workloadmeta.Assignment, bool
 	}
 	a, ok := f.state.Assignments[strings.TrimSpace(key)]
 	return a, ok
+}
+
+func (f *schedulingFSM) listVolumeBindings() *list.List[volumemeta.Binding] {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.state.VolumeBindings) == 0 {
+		return list.NewList[volumemeta.Binding]()
+	}
+	out := list.NewListWithCapacity[volumemeta.Binding](len(f.state.VolumeBindings))
+	for key := range f.state.VolumeBindings {
+		out.Add(f.state.VolumeBindings[key])
+	}
+	return out
+}
+
+func (f *schedulingFSM) getVolumeBinding(key string) (volumemeta.Binding, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.state.VolumeBindings == nil {
+		return volumemeta.Binding{}, false
+	}
+	binding, ok := f.state.VolumeBindings[strings.TrimSpace(key)]
+	return binding, ok
 }
 
 func (f *schedulingFSM) SaveSnapshot(w io.Writer, _ sm.ISnapshotFileCollection, _ <-chan struct{}) error {

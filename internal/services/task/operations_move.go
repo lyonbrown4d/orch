@@ -8,6 +8,7 @@ import (
 	"github.com/arcgolabs/collectionx/list"
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
+	"github.com/lyonbrown4d/orch/internal/volumemeta"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
@@ -27,11 +28,11 @@ func (s *Service) moveAppWorkloads(ctx context.Context, app *deployv1.App, opera
 		return summary, nil
 	}
 	generation := AppGeneration(*app)
-	if stopErr := s.stopMovePlans(ctx, app.Metadata, operation, generation, plans); stopErr != nil {
+	if stopErr := s.stopMovePlans(ctx, app, operation, generation, plans); stopErr != nil {
 		summary.Status = workloadmeta.AssignmentStatusFailed
 		return summary, stopErr
 	}
-	moved, err := s.startMovePlans(ctx, app.Metadata, generation, plans)
+	moved, err := s.startMovePlans(ctx, app, generation, plans)
 	summary.Moved = moved
 	if err != nil {
 		summary.Status = workloadmeta.AssignmentStatusFailed
@@ -90,7 +91,8 @@ func normalizeMoveTarget(targetFor workloadMoveTargetFunc, workload deployv1.Wor
 	return target, nil
 }
 
-func (s *Service) stopMovePlans(ctx context.Context, meta deployv1.Metadata, operation, generation string, plans []plannedWorkloadMove) error {
+func (s *Service) stopMovePlans(ctx context.Context, app *deployv1.App, operation, generation string, plans []plannedWorkloadMove) error {
+	meta := app.Metadata
 	for i := range slices.Backward(plans) {
 		plan := &plans[i]
 		if s.skipMoveStop(meta, operation, plan) {
@@ -98,6 +100,7 @@ func (s *Service) stopMovePlans(ctx context.Context, meta deployv1.Metadata, ope
 		}
 		if err := s.stopWorkload(ctx, meta, plan.workload); err != nil {
 			s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.current, workloadmeta.AssignmentStatusFailed, generation, err.Error())
+			s.applyWorkloadVolumeBindings(ctx, app, plan.workload, plan.current, volumemeta.BindingStatusFailed, generation, err.Error())
 			if operation == OperationFailover {
 				s.logger.Warn("failover continuing after source stop failed", "workload", plan.workload.Name, "source_node", plan.current, "error", err)
 				continue
@@ -105,6 +108,7 @@ func (s *Service) stopMovePlans(ctx context.Context, meta deployv1.Metadata, ope
 			return err
 		}
 		s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.current, workloadmeta.AssignmentStatusStopped, generation, "")
+		s.applyWorkloadVolumeBindings(ctx, app, plan.workload, plan.current, volumemeta.BindingStatusReleased, generation, "")
 	}
 	return nil
 }
@@ -117,7 +121,8 @@ func (s *Service) skipMoveStop(meta deployv1.Metadata, operation string, plan *p
 		s.workloadAssignmentStatus(meta, plan.workload.Name) == workloadmeta.AssignmentStatusFailed
 }
 
-func (s *Service) startMovePlans(ctx context.Context, meta deployv1.Metadata, generation string, plans []plannedWorkloadMove) (int, error) {
+func (s *Service) startMovePlans(ctx context.Context, app *deployv1.App, generation string, plans []plannedWorkloadMove) (int, error) {
+	meta := app.Metadata
 	moved := 0
 	for i := range plans {
 		plan := &plans[i]
@@ -125,6 +130,7 @@ func (s *Service) startMovePlans(ctx context.Context, meta deployv1.Metadata, ge
 		result, err := s.runWorkloadOnNode(ctx, meta, plan.workload, plan.target)
 		if err != nil {
 			s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.target, workloadmeta.AssignmentStatusFailed, generation, err.Error())
+			s.applyWorkloadVolumeBindings(ctx, app, plan.workload, plan.target, volumemeta.BindingStatusFailed, generation, err.Error())
 			return moved, err
 		}
 		status := strings.TrimSpace(result.Status)
@@ -132,6 +138,7 @@ func (s *Service) startMovePlans(ctx context.Context, meta deployv1.Metadata, ge
 			status = workloadmeta.AssignmentStatusRunning
 		}
 		s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.target, status, generation, "", result.Address)
+		s.applyWorkloadVolumeBindings(ctx, app, plan.workload, plan.target, volumemeta.BindingStatusBound, generation, "")
 		moved++
 	}
 	return moved, nil

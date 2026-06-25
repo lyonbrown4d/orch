@@ -18,6 +18,7 @@ import (
 	orchruntime "github.com/lyonbrown4d/orch/internal/runtime"
 	"github.com/lyonbrown4d/orch/internal/services/registry"
 	"github.com/lyonbrown4d/orch/internal/services/task"
+	"github.com/lyonbrown4d/orch/internal/volumemeta"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
 
@@ -153,6 +154,15 @@ func workloadDependsOn(names ...string) workloadOption {
 	}
 }
 
+func workloadMount(volume, target string) workloadOption {
+	return func(workload *deployv1.Workload) {
+		workload.Mounts = append(workload.Mounts, deployv1.Mount{
+			Volume: deployv1.VolumeRef{Name: volume},
+			Target: target,
+		})
+	}
+}
+
 func deployApp(name string, workloads ...deployv1.Workload) *deployv1.App {
 	return &deployv1.App{
 		Metadata:  deployv1.Metadata{Name: name, Namespace: "default"},
@@ -266,6 +276,22 @@ func (h *taskHarness) requireAssignment(t *testing.T, app *deployv1.App, workloa
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("assignment %q did not converge to node=%q status=%q, got %#v", key, nodeID, status, h.raft.ListWorkloadAssignments())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func (h *taskHarness) requireVolumeBinding(t *testing.T, app *deployv1.App, workloadName, volumeName, nodeID, status string) volumemeta.Binding {
+	t.Helper()
+	key := volumemeta.BindingKey(app.Metadata, workloadName, volumeName)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, ok := h.raft.GetVolumeBinding(key)
+		if ok && got.Node == nodeID && got.Status == status {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("volume binding %q did not converge to node=%q status=%q, got %#v", key, nodeID, status, h.raft.ListVolumeBindings())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

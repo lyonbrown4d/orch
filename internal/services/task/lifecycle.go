@@ -7,6 +7,7 @@ import (
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/runtime"
+	"github.com/lyonbrown4d/orch/internal/volumemeta"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
@@ -91,10 +92,12 @@ func (s *Service) stopAppWorkloads(ctx context.Context, app *deployv1.App) error
 		if err := s.stopWorkload(ctx, app.Metadata, workload); err != nil {
 			nodeID := assignmentNodeOrEmpty(s.raft, app.Metadata, workload.Name)
 			s.applyWorkloadAssignment(ctx, app.Metadata, workload, nodeID, workloadmeta.AssignmentStatusFailed, generation, err.Error())
+			s.applyWorkloadVolumeBindings(ctx, app, workload, nodeID, volumemeta.BindingStatusFailed, generation, err.Error())
 			return err
 		}
 		nodeID := assignmentNodeOrEmpty(s.raft, app.Metadata, workload.Name)
 		s.applyWorkloadAssignment(ctx, app.Metadata, workload, nodeID, workloadmeta.AssignmentStatusStopped, generation, "")
+		s.applyWorkloadVolumeBindings(ctx, app, workload, nodeID, volumemeta.BindingStatusReleased, generation, "")
 	}
 	return nil
 }

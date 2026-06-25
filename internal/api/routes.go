@@ -96,6 +96,7 @@ func newWorkloadEndpoints(registrySvc *registry.Service, taskSvc *task.Service) 
 		NewWorkloadsEndpoint(registrySvc),
 		NewWorkloadRuntimeEndpoint(taskSvc),
 		NewAssignmentsEndpoint(taskSvc),
+		NewVolumesEndpoint(taskSvc),
 	}}
 }
 

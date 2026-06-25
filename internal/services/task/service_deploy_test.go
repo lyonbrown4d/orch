@@ -7,6 +7,7 @@ import (
 	"github.com/lyonbrown4d/orch/internal/config"
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/services/task"
+	"github.com/lyonbrown4d/orch/internal/volumemeta"
 	"github.com/lyonbrown4d/orch/internal/workerapi"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
@@ -29,6 +30,30 @@ func TestSubmitDeployReconcilesThroughPlacementAndRuntime(t *testing.T) {
 	requireLocalCapacitySnapshot(t, harness)
 	assignment := harness.requireAssignment(t, app, "web", "node-a", workloadmeta.AssignmentStatusRunning)
 	requireAssignmentPayload(t, assignment, deployv1.RuntimeDocker, "nginx")
+}
+
+func TestSubmitDeployTracksVolumeBindingLifecycle(t *testing.T) {
+	t.Parallel()
+
+	harness := newTaskHarness(t, config.Default(), nil)
+	harness.startReconcile()
+	app := deployApp("volume-demo", dockerWorkload("db", "postgres",
+		workloadKind(deployv1.WorkloadKindStateful),
+		workloadMount("db-data", "/var/lib/postgresql/data"),
+	))
+	app.Volumes = []deployv1.Volume{{Name: "db-data", Persistent: true, SizeBytes: 1 << 30}}
+
+	harness.submitDeploy(t, app)
+	harness.waitRuntimeDeploy(t, deployReconcileTimeout)
+	binding := harness.requireVolumeBinding(t, app, "db", "db-data", "node-a", volumemeta.BindingStatusBound)
+	if binding.Workload != "db" || binding.Target != "/var/lib/postgresql/data" || !binding.Persistent || binding.SizeBytes != 1<<30 {
+		t.Fatalf("volume binding = %#v", binding)
+	}
+
+	if err := harness.svc.SubmitStop(harness.ctx, app.Metadata); err != nil {
+		t.Fatal(err)
+	}
+	harness.requireVolumeBinding(t, app, "db", "db-data", "node-a", volumemeta.BindingStatusReleased)
 }
 
 func TestSubmitDeployReconcilesWorkloadsInDependencyOrder(t *testing.T) {

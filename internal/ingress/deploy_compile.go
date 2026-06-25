@@ -49,8 +49,8 @@ func CompileIngressRoutesFromDeploy(apps *list.List[deployv1.App], dns workloadI
 	return CompileIngressRoutesFromDeployWithOptions(apps, IngressCompileOptions{DNS: dns, Log: log})
 }
 
-// CompileIngressRoutesFromDeployWithOptions flattens app.ingresses into data-plane routes. It prefers local
-// workload DNS records and falls back to forwarding through the assigned remote node's ingress listener.
+// CompileIngressRoutesFromDeployWithOptions flattens app.ingresses into data-plane routes. It forwards
+// non-local running assignments through the remote node's ingress listener and uses local DNS otherwise.
 func CompileIngressRoutesFromDeployWithOptions(apps *list.List[deployv1.App], opts IngressCompileOptions) *list.List[config.IngressRoute] {
 	if apps == nil || apps.Len() == 0 {
 		return list.NewList[config.IngressRoute]()
@@ -188,11 +188,11 @@ func (c ingressCompileContext) endpointPort(workload deployv1.Workload, workload
 }
 
 func (c ingressCompileContext) workloadTarget(workloadName string, port int) (ingressRouteTarget, bool) {
-	if ip, ok := c.localWorkloadUpstream(workloadName, port); ok {
-		return ingressRouteTarget{upstream: ip}, true
-	}
 	if upstream, ok := c.remoteIngressUpstream(workloadName); ok {
 		return ingressRouteTarget{upstream: upstream, stripPrefix: "/"}, true
+	}
+	if ip, ok := c.localWorkloadUpstream(workloadName, port); ok {
+		return ingressRouteTarget{upstream: ip}, true
 	}
 	c.logDeferred(workloadName)
 	return ingressRouteTarget{}, false

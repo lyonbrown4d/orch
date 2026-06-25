@@ -110,6 +110,25 @@ func runListAssignments(ctx context.Context, jsonOut bool) error {
 	return nil
 }
 
+func runListVolumes(ctx context.Context, jsonOut bool) error {
+	conn := cliapp.ConnFromGlobals(serverURL, authToken)
+	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
+		out, err := c.ListVolumes(ctx)
+		if err != nil {
+			return oopsx.B("cli").Wrapf(err, "list volumes")
+		}
+		if jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(out.Body.Items)
+		}
+		return writeVolumesHuman(out.Body.Items)
+	}); err != nil {
+		return oopsx.B("cli").Wrapf(err, "list volumes")
+	}
+	return nil
+}
+
 func runListApps(ctx context.Context, jsonOut bool) error {
 	conn := cliapp.ConnFromGlobals(serverURL, authToken)
 	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {

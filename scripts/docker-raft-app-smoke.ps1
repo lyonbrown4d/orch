@@ -8,6 +8,9 @@ param(
     [string]$NetworkSubnet = "",
     [string]$WorkDir = "",
     [string]$Dockerfile = "scripts/docker-raft-ingress/Dockerfile",
+    [ValidateSet("shared", "dind")]
+    [string]$RuntimeIsolation = "shared",
+    [string]$DindImage = "docker:27-dind",
     [int]$TimeoutSeconds = 600,
     [switch]$SkipBuild,
     [switch]$SkipImageBuild,
@@ -35,6 +38,7 @@ function New-ScenarioConfig {
                 IngressBase = 18380
                 Workloads = @("whoami")
                 WorkloadNodes = @{ whoami = "node-b" }
+                WorkloadVolumes = @{ whoami = @("whoamiData") }
                 DescribeWorkload = "whoami"
             }
         }
@@ -49,6 +53,7 @@ function New-ScenarioConfig {
                 IngressBase = 18180
                 Workloads = @("postgres", "redis", "nextcloud")
                 WorkloadNodes = @{ postgres = "node-b"; redis = "node-b"; nextcloud = "node-b" }
+                WorkloadVolumes = @{ postgres = @("postgresData"); redis = @("redisData"); nextcloud = @("nextcloudData") }
                 DescribeWorkload = "nextcloud"
             }
         }
@@ -73,6 +78,7 @@ function New-ScenarioConfig {
                     seaweedfilera = "node-a"; seaweedfilerb = "node-b"; seaweedfilerc = "node-c"
                     seaweeds3 = "node-b"; seaweedwebdav = "node-c"; seaweedadmin = "node-a"; seaweedworker = "node-b"
                 }
+                WorkloadVolumes = @{ seaweedvolumea = @("seaweedVolumeAData"); seaweedvolumeb = @("seaweedVolumeBData"); seaweedvolumec = @("seaweedVolumeCData") }
                 DescribeWorkload = "seaweedfilera"
             }
         }
@@ -150,6 +156,10 @@ $linuxBinDir = Assert-UnderRepo $linuxBinDir
 $logDir = Assert-UnderRepo $logDir
 New-Item -ItemType Directory -Force $hostBinDir, $linuxBinDir, $logDir | Out-Null
 
+if ($RuntimeIsolation -eq "dind" -and $KeepWorkload -and -not $KeepCluster) {
+    throw "DinD workloads live inside the per-node Docker daemons; use -KeepCluster -KeepWorkload to inspect them after a run."
+}
+
 function Test-IsWindows {
     return [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
         [System.Runtime.InteropServices.OSPlatform]::Windows
@@ -177,6 +187,133 @@ function Invoke-Checked {
 function Invoke-Docker {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
     Invoke-Checked docker $Arguments
+}
+
+function Test-NodeContainerRunning {
+    param([Parameter(Mandatory = $true)]$Node)
+    $running = & docker inspect -f "{{.State.Running}}" $Node.Name 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    return (($running | Out-String).Trim()) -eq "true"
+}
+
+function Invoke-NodeDocker {
+    param(
+        $Node = $null,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+    if ($RuntimeIsolation -eq "shared") {
+        Invoke-Docker $Arguments
+        return
+    }
+    if ($null -eq $Node) {
+        throw "Node is required for dind Docker commands"
+    }
+    if (-not (Test-NodeContainerRunning -Node $Node)) {
+        throw "Cannot run Docker command on stopped dind node $($Node.Name)"
+    }
+    $cmdArgs = @("exec", $Node.Name, "docker") + $Arguments
+    Invoke-Checked docker $cmdArgs
+}
+
+function Get-ManifestImages {
+    $content = Get-Content -Raw -Path $manifestPath
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $images = @()
+    $patterns = @(
+        'image\s*=\s*"([^"]+)"',
+        'image:\s*["'']?([^"''\s]+)'
+    )
+    foreach ($pattern in $patterns) {
+        foreach ($match in [regex]::Matches($content, $pattern)) {
+            $image = ([string]$match.Groups[1].Value).Trim()
+            if ($image -ne "" -and $seen.Add($image)) {
+                $images += $image
+            }
+        }
+    }
+    return @($images)
+}
+
+function Test-HostDockerImage {
+    param([Parameter(Mandatory = $true)][string]$Image)
+    & docker image inspect $Image *> $null
+    return $LASTEXITCODE -eq 0
+}
+
+function Import-HostImageIntoDindNode {
+    param(
+        [Parameter(Mandatory = $true)][string]$Image,
+        [Parameter(Mandatory = $true)]$Node
+    )
+    Write-Host "Loading workload image into $($Node.ID): $Image"
+    & docker image save $Image | & docker exec -i $Node.Name docker image load
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to load workload image $Image into dind node $($Node.ID)"
+    }
+}
+
+function Preload-DindImages {
+    if ($RuntimeIsolation -ne "dind") {
+        return
+    }
+    $images = @(Get-ManifestImages)
+    if ($images.Count -eq 0) {
+        Write-Host "No workload images found in manifest for DinD preload."
+        return
+    }
+    foreach ($image in $images) {
+        if (-not (Test-HostDockerImage -Image $image)) {
+            Write-Host "Pulling workload image on host for DinD preload: $image"
+            Invoke-Docker @("image", "pull", $image)
+        }
+        foreach ($node in $nodes) {
+            if (-not (Test-NodeContainerRunning -Node $node)) {
+                continue
+            }
+            Import-HostImageIntoDindNode -Image $image -Node $node
+        }
+    }
+}
+function Get-DockerContainerIDsByName {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        $Node = $null
+    )
+    $dockerArgs = @("ps", "-a", "--filter", "name=^/$Name$", "--format", "{{.ID}}")
+    if ($RuntimeIsolation -eq "shared") {
+        $raw = & docker @dockerArgs
+        $context = "host Docker daemon"
+    }
+    else {
+        if ($null -eq $Node) {
+            throw "Node is required when checking dind workload containers"
+        }
+        if (-not (Test-NodeContainerRunning -Node $Node)) {
+            return @()
+        }
+        $cmdArgs = @("exec", $Node.Name, "docker") + $dockerArgs
+        $raw = & docker @cmdArgs
+        $context = "dind node $($Node.ID)"
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker ps failed while checking $Name on $context"
+    }
+    $text = ($raw | Out-String).Trim()
+    if ($text -eq "") {
+        return @()
+    }
+    $lines = $text -split "\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    return @($lines)
+}
+
+function ConvertTo-ShSingleQuoted {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    $single = [string][char]39
+    $double = [string][char]34
+    $escapedSingle = $single + $double + $single + $double + $single
+    return $single + $Value.Replace($single, $escapedSingle) + $single
 }
 
 function Invoke-CLIJson {
@@ -368,6 +505,87 @@ function Expected-WorkloadNode {
     }
     return $targetNodeID
 }
+function VolumeNamesForWorkload {
+    param([Parameter(Mandatory = $true)][string]$WorkloadName)
+    $volumesByWorkload = $scenarioCfg.WorkloadVolumes
+    if ($null -eq $volumesByWorkload -or -not $volumesByWorkload.ContainsKey($WorkloadName)) {
+        return @()
+    }
+    return @($volumesByWorkload[$WorkloadName])
+}
+
+function Wait-VolumeBindingBoundOn {
+    param(
+        [Parameter(Mandatory = $true)]$LeaderNode,
+        [Parameter(Mandatory = $true)][string]$WorkloadName,
+        [Parameter(Mandatory = $true)][string]$ExpectedNodeID
+    )
+    $volumeNames = @(VolumeNamesForWorkload -WorkloadName $WorkloadName)
+    if ($volumeNames.Count -eq 0) {
+        return
+    }
+    $leaderURL = Node-URL $LeaderNode
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $bindings = Invoke-CLIJson -ServerURL $leaderURL -Arguments @("get", "volumes", "--json")
+        $bound = 0
+        foreach ($volumeName in $volumeNames) {
+            $key = "$namespace/$appName/$WorkloadName/$volumeName"
+            $found = $bindings | Where-Object {
+                $_.key -eq $key -and $_.workload -eq $WorkloadName -and $_.node -eq $ExpectedNodeID -and $_.status -eq "bound"
+            } | Select-Object -First 1
+            if ($null -ne $found) {
+                $bound++
+            }
+        }
+        if ($bound -eq $volumeNames.Count) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for volumes of $WorkloadName to bind on $ExpectedNodeID"
+}
+
+function Wait-VolumeBindingsBound {
+    param([Parameter(Mandatory = $true)]$LeaderNode)
+    foreach ($name in $workloadNames) {
+        $expectedNode = Expected-WorkloadNode -WorkloadName $name
+        Wait-VolumeBindingBoundOn -LeaderNode $LeaderNode -WorkloadName $name -ExpectedNodeID $expectedNode
+    }
+}
+
+function Wait-VolumeBindingsReleased {
+    param([Parameter(Mandatory = $true)]$LeaderNode)
+    $expected = 0
+    foreach ($name in $workloadNames) {
+        $expected += @(VolumeNamesForWorkload -WorkloadName $name).Count
+    }
+    if ($expected -eq 0) {
+        return
+    }
+    $leaderURL = Node-URL $LeaderNode
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $bindings = Invoke-CLIJson -ServerURL $leaderURL -Arguments @("get", "volumes", "--json")
+        $released = 0
+        foreach ($name in $workloadNames) {
+            foreach ($volumeName in @(VolumeNamesForWorkload -WorkloadName $name)) {
+                $key = "$namespace/$appName/$name/$volumeName"
+                $found = $bindings | Where-Object {
+                    $_.key -eq $key -and $_.status -eq "released"
+                } | Select-Object -First 1
+                if ($null -ne $found) {
+                    $released++
+                }
+            }
+        }
+        if ($released -eq $expected) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for $($scenarioCfg.Slug) volume bindings to release"
+}
 function Wait-AssignmentsRunning {
     param([Parameter(Mandatory = $true)]$LeaderNode)
     $leaderURL = Node-URL $LeaderNode
@@ -386,6 +604,7 @@ function Wait-AssignmentsRunning {
             }
         }
         if ($running -eq $workloadNames.Count) {
+            Wait-VolumeBindingsBound -LeaderNode $LeaderNode
             return
         }
         Start-Sleep -Seconds 1
@@ -410,6 +629,7 @@ function Wait-AssignmentRunningOn {
         if ($null -ne $found) {
             $address = [string](Get-JSONProperty -Object $found -Name "address" -Default "")
             if ($address -ne "") {
+                Wait-VolumeBindingBoundOn -LeaderNode $LeaderNode -WorkloadName $WorkloadName -ExpectedNodeID $ExpectedNodeID
                 return
             }
         }
@@ -514,6 +734,11 @@ function Invoke-PlacementOperations {
     if ($scenarioCfg.Slug -ne "placement") {
         return
     }
+    if ($RuntimeIsolation -ne "dind") {
+        Write-Host ""
+        Write-Host "Skipping placement move/failover operations in $RuntimeIsolation runtime isolation; use -RuntimeIsolation dind for real per-node runtime movement."
+        return
+    }
 
     $workloadName = "whoami"
     $preferredNodeID = "node-b"
@@ -578,12 +803,12 @@ function Wait-WorkloadContainersRemoved {
     while ((Get-Date) -lt $deadline) {
         $remaining = 0
         foreach ($name in $containerNames) {
-            $ids = & docker ps -a --filter "name=^/$name$" --format "{{.ID}}"
-            if ($LASTEXITCODE -ne 0) {
-                throw "docker ps failed while checking $name"
+            if ($RuntimeIsolation -eq "shared") {
+                $remaining += @(Get-DockerContainerIDsByName -Name $name).Count
+                continue
             }
-            if ((($ids | Out-String).Trim()) -ne "") {
-                $remaining++
+            foreach ($node in $nodes) {
+                $remaining += @(Get-DockerContainerIDsByName -Name $name -Node $node).Count
             }
         }
         if ($remaining -eq 0) {
@@ -602,6 +827,20 @@ function Remove-ContainerIfExists {
     }
     if ((($id | Out-String).Trim()) -ne "") {
         Invoke-Docker @("rm", "-f", $Name)
+    }
+}
+
+function Remove-WorkloadContainerIfExists {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    if ($RuntimeIsolation -eq "shared") {
+        Remove-ContainerIfExists -Name $Name
+        return
+    }
+    foreach ($node in $nodes) {
+        $ids = @(Get-DockerContainerIDsByName -Name $Name -Node $node)
+        if ($ids.Count -gt 0) {
+            Invoke-NodeDocker -Node $node -Arguments @("rm", "-f", $Name)
+        }
     }
 }
 
@@ -634,19 +873,11 @@ function Build-Binaries {
     }
 }
 
-function Start-OrchNode {
+function New-OrchServerArguments {
     param([Parameter(Mandatory = $true)]$Node)
     $peers = ($nodes | ForEach-Object { "$($_.ID)=$($_.Name):$raftPort" }) -join ","
     $clusterNodes = ($nodes | ForEach-Object { "$($_.ID)=http://$($_.Name):$apiPort" }) -join ","
-    Invoke-Docker @(
-        "run", "--detach",
-        "--name", $Node.Name,
-        "--network", $NetworkName,
-        "--ip", $Node.IP,
-        "--volume", "/var/run/docker.sock:/var/run/docker.sock",
-        "--publish", "$($Node.APIHostPort):$apiPort",
-        "--publish", "$($Node.IngressHostPort):$ingressPort",
-        $ImageTag,
+    return @(
         "--http-addr", ":$apiPort",
         "--raft-node-id", $Node.ID,
         "--raft-bind", "0.0.0.0:$raftPort",
@@ -668,6 +899,76 @@ function Start-OrchNode {
     )
 }
 
+function Start-SharedOrchNode {
+    param([Parameter(Mandatory = $true)]$Node)
+    $serverArgs = New-OrchServerArguments -Node $Node
+    $runArgs = @(
+        "run", "--detach",
+        "--name", $Node.Name,
+        "--network", $NetworkName,
+        "--ip", $Node.IP,
+        "--volume", "/var/run/docker.sock:/var/run/docker.sock",
+        "--publish", "$($Node.APIHostPort):$apiPort",
+        "--publish", "$($Node.IngressHostPort):$ingressPort",
+        $ImageTag
+    ) + $serverArgs
+    Invoke-Docker $runArgs
+}
+
+function Start-DindOrchNode {
+    param([Parameter(Mandatory = $true)]$Node)
+    $serverArgs = New-OrchServerArguments -Node $Node
+    $quotedNetworkName = ConvertTo-ShSingleQuoted -Value $NetworkName
+    $quotedServerArgs = ($serverArgs | ForEach-Object { ConvertTo-ShSingleQuoted -Value $_ }) -join " "
+    $dindCommandTemplate = @'
+set -eu
+mkdir -p /var/log
+dockerd-entrypoint.sh dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 > /var/log/dockerd.log 2>&1 &
+dockerd_pid="$!"
+i=0
+until docker info >/dev/null 2>&1; do
+  i=$((i + 1))
+  if [ "$i" -gt 120 ]; then
+    echo "dockerd did not become ready" >&2
+    cat /var/log/dockerd.log >&2 || true
+    exit 1
+  fi
+  if ! kill -0 "$dockerd_pid" >/dev/null 2>&1; then
+    echo "dockerd exited before becoming ready" >&2
+    cat /var/log/dockerd.log >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+docker network inspect __ORCH_DIND_NETWORK__ >/dev/null 2>&1 || docker network create __ORCH_DIND_NETWORK__ >/dev/null
+exec /usr/local/bin/orch-server __ORCH_SERVER_ARGS__
+'@
+    $dindCommand = $dindCommandTemplate.Replace("__ORCH_DIND_NETWORK__", $quotedNetworkName).Replace("__ORCH_SERVER_ARGS__", $quotedServerArgs)
+    Invoke-Docker @(
+        "run", "--detach",
+        "--name", $Node.Name,
+        "--privileged",
+        "--network", $NetworkName,
+        "--ip", $Node.IP,
+        "--env", "DOCKER_TLS_CERTDIR=",
+        "--volume", "$($linuxServerBin):/usr/local/bin/orch-server:ro",
+        "--publish", "$($Node.APIHostPort):$apiPort",
+        "--publish", "$($Node.IngressHostPort):$ingressPort",
+        "--entrypoint", "sh",
+        $DindImage,
+        "-c", $dindCommand
+    )
+}
+
+function Start-OrchNode {
+    param([Parameter(Mandatory = $true)]$Node)
+    if ($RuntimeIsolation -eq "dind") {
+        Start-DindOrchNode -Node $Node
+        return
+    }
+    Start-SharedOrchNode -Node $Node
+}
+
 function Save-DockerLogs {
     foreach ($node in $nodes) {
         try {
@@ -678,17 +979,51 @@ function Save-DockerLogs {
         catch {
             Write-Warning "failed to collect logs for $($node.Name): $_"
         }
-    }
-    foreach ($name in $containerNames) {
-        try {
-            $logPath = Join-Path $logDir "$name.docker.log"
-            & docker logs $name *> $logPath
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "Saved logs for ${name}: $logPath"
+        if ($RuntimeIsolation -eq "dind" -and (Test-NodeContainerRunning -Node $node)) {
+            try {
+                $dockerdLogPath = Join-Path $logDir "$($node.ID).dockerd.log"
+                & docker exec $node.Name sh -c "cat /var/log/dockerd.log 2>/dev/null" *> $dockerdLogPath
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Saved dockerd logs for $($node.Name): $dockerdLogPath"
+                }
+            }
+            catch {
+                Write-Warning "failed to collect dockerd logs for $($node.Name): $_"
             }
         }
-        catch {
-            Write-Warning "failed to collect logs for ${name}: $_"
+    }
+    foreach ($name in $containerNames) {
+        if ($RuntimeIsolation -eq "shared") {
+            try {
+                $logPath = Join-Path $logDir "$name.docker.log"
+                & docker logs $name *> $logPath
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Saved logs for ${name}: $logPath"
+                }
+            }
+            catch {
+                Write-Warning "failed to collect logs for ${name}: $_"
+            }
+            continue
+        }
+        foreach ($node in $nodes) {
+            if (-not (Test-NodeContainerRunning -Node $node)) {
+                continue
+            }
+            try {
+                $ids = @(Get-DockerContainerIDsByName -Name $name -Node $node)
+                if ($ids.Count -eq 0) {
+                    continue
+                }
+                $logPath = Join-Path $logDir "$($node.ID).$name.docker.log"
+                & docker exec $node.Name docker logs $name *> $logPath
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Saved logs for ${name} on $($node.ID): $logPath"
+                }
+            }
+            catch {
+                Write-Warning "failed to collect logs for ${name} on $($node.ID): $_"
+            }
         }
     }
 }
@@ -708,7 +1043,12 @@ if (-not (Test-Path $linuxServerBin)) {
     throw "Linux server binary not found: $linuxServerBin"
 }
 if (-not $SkipImageBuild) {
-    Invoke-Docker @("build", "-t", $ImageTag, "-f", $Dockerfile, $linuxBinDir)
+    if ($RuntimeIsolation -eq "shared") {
+        Invoke-Docker @("build", "-t", $ImageTag, "-f", $Dockerfile, $linuxBinDir)
+    }
+    else {
+        Write-Host "Skipping orch-server image build for dind runtime isolation; nodes mount $linuxServerBin into $DindImage."
+    }
 }
 
 try {
@@ -718,7 +1058,7 @@ try {
         }
         if (-not $KeepWorkload) {
             foreach ($name in $containerNames) {
-                Remove-ContainerIfExists -Name $name
+                Remove-WorkloadContainerIfExists -Name $name
             }
         }
         Remove-NetworkIfExists
@@ -732,6 +1072,7 @@ try {
         Wait-CLIReady -Node $node
     }
     Wait-RaftMembers
+    Preload-DindImages
 
     $leader = Find-LeaderNode
     $leaderID = [string]$leader.ID
@@ -743,6 +1084,10 @@ try {
     Write-Host "Leader API:           $leaderURL"
     Write-Host "Target DNS:           $($targetNode.IP):53"
     Write-Host "Target ingress:       http://127.0.0.1:$($targetNode.IngressHostPort)/"
+    Write-Host "Runtime isolation:    $RuntimeIsolation"
+    if ($RuntimeIsolation -eq "dind") {
+        Write-Host "DinD image:           $DindImage"
+    }
     Write-Host "Docker network:       $NetworkName ($NetworkSubnet)"
     Write-Host "Manifest:             $manifestPath"
     Write-Host ""
@@ -754,6 +1099,7 @@ try {
 
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "apps")
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "assignments")
+    Invoke-Checked $cliBin @("--server", $leaderURL, "get", "volumes")
     Invoke-Checked $cliBin @("--server", $leaderURL, "describe", "workload", $scenarioCfg.DescribeWorkload, "--app", $appName, "-n", $namespace)
 
     if (-not $KeepWorkload) {
@@ -761,6 +1107,7 @@ try {
         Write-Host "Deleting $($scenarioCfg.Slug) app..."
         Invoke-Checked $cliBin @("--server", $leaderURL, "delete", "app", $appName, "-n", $namespace)
         Wait-AppDeleted -LeaderNode $leader
+        Wait-VolumeBindingsReleased -LeaderNode $leader
         Wait-WorkloadContainersRemoved
     }
 
@@ -785,7 +1132,7 @@ finally {
     if (-not $KeepWorkload) {
         foreach ($name in $containerNames) {
             try {
-                Remove-ContainerIfExists -Name $name
+                Remove-WorkloadContainerIfExists -Name $name
             }
             catch {
                 Write-Warning $_

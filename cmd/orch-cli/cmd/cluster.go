@@ -96,6 +96,10 @@ func newAssignmentsCmd() *cobra.Command {
 	return newAssignmentsListCmd("assignments", []string{"assignment"})
 }
 
+func newVolumesCmd() *cobra.Command {
+	return newVolumesListCmd("volumes", []string{"volume", "vol"})
+}
+
 func newRuntimesCmd() *cobra.Command {
 	return newRuntimesListCmd("runtimes", []string{"runtime", "providers"})
 }
@@ -138,6 +142,23 @@ func newAssignmentsListCmd(use string, aliases []string) *cobra.Command {
 	return cmd
 }
 
+func newVolumesListCmd(use string, aliases []string) *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:     use,
+		Aliases: aliases,
+		Short:   "List local runtime volume bindings",
+		Long:    `Shows persisted local runtime volume bindings from the current control plane context (--server).`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := contextFromCmd(cmd)
+			return runListVolumes(ctx, jsonOut)
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON array")
+	return cmd
+}
+
 func newRuntimesListCmd(use string, aliases []string) *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -165,6 +186,7 @@ func newGetCmd() *cobra.Command {
 	cmd.AddCommand(newAppsListCmd("apps", []string{"app"}))
 	cmd.AddCommand(newWorkloadsListCmd("workloads", []string{"workload", "wl", "ps"}))
 	cmd.AddCommand(newAssignmentsListCmd("assignments", []string{"assignment", "assign"}))
+	cmd.AddCommand(newVolumesListCmd("volumes", []string{"volume", "vol", "pv"}))
 	cmd.AddCommand(newRuntimesListCmd("runtimes", []string{"runtime", "providers"}))
 	return cmd
 }

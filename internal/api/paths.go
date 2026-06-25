@@ -12,6 +12,7 @@ const (
 	PathV1Apps             = BasePath + "/v1/apps"
 	PathV1Workloads        = BasePath + "/v1/workloads"
 	PathV1Assignments      = BasePath + "/v1/assignments"
+	PathV1Volumes          = BasePath + "/v1/volumes"
 	PathV1Deploy           = BasePath + "/v1/deploy"
 	PathV1DeployDelete     = BasePath + "/v1/deploy"
 	PathV1DeployFailover   = BasePath + "/v1/deploy"

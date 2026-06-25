@@ -127,6 +127,15 @@ func (c *Client) ListAssignments(ctx context.Context) (*api.ListAssignmentsOutpu
 	return &out, nil
 }
 
+// ListVolumes calls GET /api/v1/volumes.
+func (c *Client) ListVolumes(ctx context.Context) (*api.ListVolumesOutput, error) {
+	var out api.ListVolumesOutput
+	if err := c.get(ctx, api.PathV1Volumes, &out.Body); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) ListApps(ctx context.Context) (*api.ListAppsOutput, error) {
 	var out api.ListAppsOutput
 	if err := c.get(ctx, api.PathV1Apps, &out.Body); err != nil {

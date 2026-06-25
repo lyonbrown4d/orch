@@ -9,6 +9,18 @@ app {
     network = "orch-raft-seaweed-smoke"
   }
 
+  volume seaweedVolumeAData {
+    persistent = true
+  }
+
+  volume seaweedVolumeBData {
+    persistent = true
+  }
+
+  volume seaweedVolumeCData {
+    persistent = true
+  }
+
   stateful seaweedmastera {
     image = "chrislusf/seaweedfs:3.85"
     preferred_nodes = ["node-a"]
@@ -68,6 +80,11 @@ app {
       "-max=2",
     ]
 
+    mount {
+      volume = "seaweedVolumeAData"
+      target = "/data"
+    }
+
     http(8080)
   }
 
@@ -85,6 +102,11 @@ app {
       "-max=2",
     ]
 
+    mount {
+      volume = "seaweedVolumeBData"
+      target = "/data"
+    }
+
     http(8080)
   }
 
@@ -101,6 +123,11 @@ app {
       "-dir=/data",
       "-max=2",
     ]
+
+    mount {
+      volume = "seaweedVolumeCData"
+      target = "/data"
+    }
 
     http(8080)
   }

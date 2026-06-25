@@ -9,12 +9,35 @@ These smoke tests verify heavier application deployments on the Docker runtime:
 The workload definitions are committed as native `.orch` DSL files under
 `examples/integration/`. The script does not generate deploy YAML; it starts the
 test cluster, calls the CLI with the workload file, waits for status, and then
-runs HTTP checks through ingress.
+runs HTTP checks through ingress, and checks local runtime volume bindings when the scenario declares mounts.
 
-The scripts currently mount the host Docker socket into the control-plane
-containers. This keeps the tests reproducible on a local Docker engine without
-adding Docker-in-Docker startup cost. A future DinD variant can reuse the same
-`.orch` files when we want a fully nested Docker daemon per test node.
+## Runtime Isolation Modes
+
+The default mode is `-RuntimeIsolation shared`. Each orch-server container mounts
+the host Docker socket, so all nodes dispatch workloads into the same local
+Docker daemon. This is fast for deploy, ingress, and volume-binding lifecycle
+checks, but it is not a faithful workload movement model: a stopped orch-server
+node does not stop a separate Docker host, and all nodes share container names.
+
+Use `-RuntimeIsolation dind` for a minimum real multi-node runtime shape. In this
+mode each node is a privileged `docker:dind` container that starts its own
+`dockerd` and then runs `orch-server` inside that same container. Workloads are
+created inside the assigned node's nested Docker daemon, not in the host daemon.
+The script creates a same-named Docker network inside each nested daemon so the
+existing `.orch` manifests can be reused. Before deploy, it parses workload image
+references from the manifest, saves them from the host Docker cache, and loads
+them into each nested daemon to avoid repeated Docker Hub pulls during the test.
+
+DinD mode requires a Docker host that allows privileged containers and may need
+to pull `docker:27-dind` plus workload images from Docker Hub. Host `docker ps`
+will show the three orch/DinD node containers; inspect nested workloads with:
+
+```powershell
+docker exec orch-placement-node-b docker ps
+```
+
+Use `-KeepCluster -KeepWorkload` together when inspecting dind workloads after a
+run, because those workloads live inside the per-node daemons.
 
 ## Scenarios
 
@@ -40,11 +63,7 @@ operation chain:
   node outage
 - `failover app placement-smoke --to <survivor> --workload whoami`
 
-Each step waits for the assignment to become `running` on the expected node and
-then checks whoami through the live ingress ports. In the current local Docker
-setup all orch-server containers share the host Docker socket, so the node outage
-models worker API/control-plane unavailability rather than a separate Docker
-host losing power.
+In `shared` mode, the placement smoke runs only the deploy/status/volume/ingress/delete chain. The user-facing movement chain is intentionally reserved for `-RuntimeIsolation dind`, where each node owns a separate Docker daemon. In DinD mode each step waits for the assignment and mounted volume binding to become `running`/`bound` on the expected node, then checks whoami through the live ingress ports. The stopped node also loses its nested Docker daemon, so the placement DinD smoke is the lightest starting point for real multi-node runtime validation.
 
 ### Nextcloud
 
@@ -97,6 +116,7 @@ workload DNS records, and cross-node ingress forwarding.
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -RuntimeIsolation dind
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed
 ```
@@ -109,9 +129,11 @@ Use `-KeepCluster -KeepWorkload` to inspect a successful run before cleanup.
 
 ## Current Boundaries
 
-These tests validate deployment and connectivity. Docker runtime `mounts` now map
-to local Docker named volumes, but these smoke scenarios still do not validate
-cross-node shared storage, attach/detach orchestration, or data migration.
+These tests validate deployment, connectivity, and local runtime volume binding lifecycle. Docker runtime `mounts` now map
+to local Docker named volumes, and cleanup waits for bindings to become `released`. In `dind` mode those named volumes are local to the
+assigned node's nested daemon, which is useful for lifecycle isolation checks but
+still does not validate cross-node shared storage, attach/detach orchestration,
+or data migration.
 
 Placement is intentionally lightweight and focuses on control-plane operations:
 migrate, rebalance, and failover after a simulated non-leader node outage.

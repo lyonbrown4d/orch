@@ -9,9 +9,18 @@ app {
     network = "orch-raft-placement-smoke"
   }
 
+  volume whoamiData {
+    persistent = true
+  }
+
   service whoami {
     image = "traefik/whoami:v1.11"
     preferred_nodes = ["node-b"]
+
+    mount {
+      volume = "whoamiData"
+      target = "/tmp/orch-data"
+    }
 
     http(80)
   }

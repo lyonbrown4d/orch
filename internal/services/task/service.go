@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/lyonbrown4d/orch/internal/config"
+	"github.com/lyonbrown4d/orch/internal/dnssvc"
 	"github.com/lyonbrown4d/orch/internal/metrics"
 	"github.com/lyonbrown4d/orch/internal/nodecapacity"
 	"github.com/lyonbrown4d/orch/internal/nodeid"
@@ -26,6 +27,7 @@ type Service struct {
 	local      nodeid.Local
 	raft       *raftsvc.Service
 	dispatcher WorkerDispatcher
+	dns        *dnssvc.Service
 
 	reconcileMu     sync.Mutex
 	reconcileCancel context.CancelFunc
@@ -45,5 +47,6 @@ func NewService(logger *slog.Logger, metricService *metrics.Service, runtimeMana
 		local:      bundle.LocalNode,
 		raft:       bundle.Raft,
 		dispatcher: bundle.Dispatcher,
+		dns:        bundle.DNS,
 	}
 }

@@ -1,0 +1,56 @@
+// Integration smoke: Nextcloud + Postgres + Redis on the Docker provider.
+// The smoke script starts a 3-node orch cluster and deploys this file via orch-cli.
+
+app {
+  name = "nextcloud-smoke"
+  namespace = "default"
+
+  docker {
+    network = "orch-raft-nextcloud-smoke"
+  }
+
+  stateful postgres {
+    image = "postgres:16-alpine"
+    preferred_nodes = ["node-b"]
+    env = {
+      POSTGRES_DB = "nextcloud",
+      POSTGRES_USER = "nextcloud",
+      POSTGRES_PASSWORD = "nextcloud-pass",
+    }
+
+    tcp(5432)
+  }
+
+  stateful redis {
+    image = "redis:7-alpine"
+    preferred_nodes = ["node-b"]
+
+    tcp(6379)
+  }
+
+  service nextcloud {
+    image = "nextcloud:29-apache"
+    depends_on = [postgres, redis]
+    preferred_nodes = ["node-b"]
+    env = {
+      POSTGRES_HOST = "postgres.default.svc.orch.local",
+      POSTGRES_DB = "nextcloud",
+      POSTGRES_USER = "nextcloud",
+      POSTGRES_PASSWORD = "nextcloud-pass",
+      REDIS_HOST = "redis.default.svc.orch.local",
+      NEXTCLOUD_ADMIN_USER = "orch",
+      NEXTCLOUD_ADMIN_PASSWORD = "orch-password",
+      NEXTCLOUD_TRUSTED_DOMAINS = "127.0.0.1 127.0.0.1:18180 127.0.0.1:18181 127.0.0.1:18182 localhost nextcloud.default.svc.orch.local orch-nextcloud-node-a orch-nextcloud-node-b orch-nextcloud-node-c",
+      OVERWRITEPROTOCOL = "http",
+      PHP_MEMORY_LIMIT = "512M",
+    }
+
+    http(80)
+  }
+
+  ingress public {
+    path "/" {
+      workload = nextcloud
+    }
+  }
+}

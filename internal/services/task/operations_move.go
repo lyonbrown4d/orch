@@ -118,15 +118,16 @@ func (s *Service) startMovePlans(ctx context.Context, meta deployv1.Metadata, ge
 	for i := range plans {
 		plan := &plans[i]
 		s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.target, workloadmeta.AssignmentStatusAssigned, generation, "")
-		status, err := s.runWorkloadOnNode(ctx, meta, plan.workload, plan.target)
+		result, err := s.runWorkloadOnNode(ctx, meta, plan.workload, plan.target)
 		if err != nil {
 			s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.target, workloadmeta.AssignmentStatusFailed, generation, err.Error())
 			return moved, err
 		}
+		status := strings.TrimSpace(result.Status)
 		if status == "" {
 			status = workloadmeta.AssignmentStatusRunning
 		}
-		s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.target, status, generation, "")
+		s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.target, status, generation, "", result.Address)
 		moved++
 	}
 	return moved, nil

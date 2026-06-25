@@ -27,6 +27,7 @@ type WorkerDispatcher interface {
 type DispatchResult struct {
 	Accepted bool
 	Node     string
+	Address  string
 	Status   string
 	Workload string
 }
@@ -112,6 +113,7 @@ func decodeWorkerDeploy(data []byte, nodeID, fallbackWorkload string) (DispatchR
 	return DispatchResult{
 		Accepted: out.Body.Accepted,
 		Node:     node,
+		Address:  strings.TrimSpace(out.Body.Address),
 		Status:   status,
 		Workload: workloadName,
 	}, nil

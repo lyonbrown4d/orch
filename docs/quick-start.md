@@ -99,6 +99,7 @@ task smoke:local-podman-dns
 task smoke:local-docker-worker-dispatch
 task smoke:local-podman-worker-dispatch
 task smoke:local-raft-forwarding
+task smoke:systemd-docker
 ```
 
 This starts a single-node server and deploys either
@@ -108,13 +109,14 @@ up by default. The DNS smoke deploys two workloads and verifies the client can
 reach `dns-backend.default.svc.orch.local` through orch DNS. The worker dispatch
 smoke starts separate scheduler and worker server processes and verifies remote
 dispatch through the worker API. The Raft forwarding smoke starts a local
-three-node cluster and verifies apply/delete through a follower. See
-`docs/local-docker-smoke.md`,
-`docs/local-podman-smoke.md`,
-`docs/local-docker-dns-smoke.md`, and
-`docs/local-docker-worker-dispatch-smoke.md`, and `docs/local-raft.md`.
-`docs/local-podman-dns-smoke.md`, and
-`docs/local-podman-worker-dispatch-smoke.md`.
+three-node cluster and verifies apply/delete through a follower. The Docker
+systemd smoke installs the Linux package in a privileged Debian systemd
+container and verifies `orch-server.service` plus a small `systemd` workload.
+See `docs/local-docker-smoke.md`, `docs/local-podman-smoke.md`,
+`docs/local-docker-dns-smoke.md`, `docs/local-podman-dns-smoke.md`,
+`docs/local-docker-worker-dispatch-smoke.md`,
+`docs/local-podman-worker-dispatch-smoke.md`, `docs/local-raft.md`, and
+`docs/systemd-docker-smoke.md`.
 
 ## Full-stack application example
 

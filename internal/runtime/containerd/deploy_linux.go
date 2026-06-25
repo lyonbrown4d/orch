@@ -164,7 +164,7 @@ func criEnv(vars *list.List[deployv1.EnvVar]) []*runtimeapi.KeyValue {
 		if name == "" {
 			return nil, false
 		}
-		return &runtimeapi.KeyValue{Key: name, Value: v.Value}, true
+		return &runtimeapi.KeyValue{Key: name, Value: []byte(v.Value)}, true
 	}).Values()
 }
 

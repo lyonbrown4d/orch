@@ -100,7 +100,7 @@ func (p *Provider) Stop(ctx context.Context, meta deployv1.Metadata, workloadNam
 		if err := systemdStop(ctx, conn, unitName); err != nil {
 			p.logger.Warn("systemd stop unit", "unit", unitName, "error", err)
 		}
-		if err := systemdDisable(ctx, conn, unitPath); err != nil {
+		if err := systemdDisable(ctx, conn, unitName); err != nil {
 			p.logger.Warn("systemd disable unit", "unit", unitName, "error", err)
 		}
 	}
@@ -135,7 +135,7 @@ func (p *Provider) cleanupUnit(ctx context.Context, unitName, unitPath string) {
 		if err := systemdStop(ctx, conn, unitName); err != nil {
 			p.logger.Warn("systemd cleanup stop unit", "unit", unitName, "error", err)
 		}
-		if err := systemdDisable(ctx, conn, unitPath); err != nil {
+		if err := systemdDisable(ctx, conn, unitName); err != nil {
 			p.logger.Warn("systemd cleanup disable unit", "unit", unitName, "error", err)
 		}
 	}
@@ -174,9 +174,9 @@ func systemdEnable(ctx context.Context, conn Connection, unitPath string) error 
 	return nil
 }
 
-func systemdDisable(ctx context.Context, conn Connection, unitPath string) error {
-	if _, err := conn.DisableUnitFilesContext(ctx, []string{unitPath}, false); err != nil {
-		return oopsx.B("runtime", "systemd").Wrapf(err, "disable unit %s", filepath.Base(unitPath))
+func systemdDisable(ctx context.Context, conn Connection, unitName string) error {
+	if _, err := conn.DisableUnitFilesContext(ctx, []string{unitName}, false); err != nil {
+		return oopsx.B("runtime", "systemd").Wrapf(err, "disable unit %s", unitName)
 	}
 	return nil
 }

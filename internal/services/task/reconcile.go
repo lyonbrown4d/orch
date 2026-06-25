@@ -2,10 +2,13 @@ package task
 
 import (
 	"context"
+	"time"
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
+
+const deployReconcileInterval = 2 * time.Second
 
 // StartDeployReconcile runs a background loop that executes [Service.deployAppWorkloads] whenever the Raft FSM
 // updates desired deploy documents (and once immediately for startup catch-up).
@@ -45,24 +48,45 @@ func (s *Service) beginDeployReconcile(ctx context.Context) (context.Context, co
 func (s *Service) runDeployReconcile(ctx context.Context, cancel context.CancelFunc, ch <-chan struct{}, runID uint64) {
 	defer cancel()
 	defer s.finishDeployReconcile(runID)
+	s.logger.Info("deploy reconcile started")
+	if !s.waitDeployReconcileLeader(ctx) {
+		return
+	}
+	s.runDeployReconcileLoop(ctx, ch)
+}
+
+func (s *Service) waitDeployReconcileLeader(ctx context.Context) bool {
 	if err := s.raft.WaitLocalLeader(ctx); err != nil {
 		if ctx.Err() == nil {
 			s.logger.Warn("deploy reconcile waiting for raft leader stopped", "error", err)
 		}
-		return
+		return false
 	}
+	s.logger.Info("deploy reconcile acquired raft leadership")
+	return true
+}
+
+func (s *Service) runDeployReconcileLoop(ctx context.Context, ch <-chan struct{}) {
 	if !s.reconcilePendingDeploys(ctx, ch) {
 		return
 	}
-	for {
-		select {
-		case <-ctx.Done():
+	ticker := time.NewTicker(deployReconcileInterval)
+	defer ticker.Stop()
+	for s.waitDeployReconcileTrigger(ctx, ch, ticker.C) {
+		if !s.reconcilePendingDeploys(ctx, ch) {
 			return
-		case <-ch:
-			if !s.reconcilePendingDeploys(ctx, ch) {
-				return
-			}
 		}
+	}
+}
+
+func (s *Service) waitDeployReconcileTrigger(ctx context.Context, ch <-chan struct{}, tick <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-ch:
+		return true
+	case <-tick:
+		return true
 	}
 }
 
@@ -123,7 +147,13 @@ func (s *Service) waitDeployReconcileStopped(ctx context.Context) error {
 }
 
 func (s *Service) reconcileAll(ctx context.Context) {
-	s.raft.ListDesiredDeployApps().Range(func(_ int, app deployv1.App) bool {
+	apps := s.raft.ListDesiredDeployApps()
+	if apps.Len() == 0 {
+		s.logger.Debug("deploy reconcile found no desired apps")
+		return
+	}
+	s.logger.Debug("deploy reconcile desired apps", "apps", apps.Len())
+	apps.Range(func(_ int, app deployv1.App) bool {
 		current := app
 		if err := s.deployAppWorkloads(ctx, &current); err != nil {
 			s.logger.Warn("deploy reconcile", "error", err, "app", current.Metadata.Name)

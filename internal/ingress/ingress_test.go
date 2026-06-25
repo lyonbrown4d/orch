@@ -13,6 +13,7 @@ import (
 	"github.com/lyonbrown4d/orch/internal/config"
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/ingress"
+	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
 
 func testHTTPHandler(t *testing.T, routes *list.List[config.IngressRoute]) http.Handler {
@@ -247,5 +248,114 @@ func TestCompileIngressRoutesFromDeploy(t *testing.T) {
 	route, ok := got.Get(0)
 	if got.Len() != 1 || !ok || route.PathPrefix != "/api" || route.Upstream != "http://10.0.0.2:8080" {
 		t.Fatalf("got %#v", got.Values())
+	}
+}
+
+type mapAssignments map[string]workloadmeta.Assignment
+
+func (m mapAssignments) GetWorkloadAssignment(key string) (workloadmeta.Assignment, bool) {
+	assignment, ok := m[key]
+	return assignment, ok
+}
+
+func TestCompileIngressRoutesFromDeployRemoteAssignment(t *testing.T) {
+	t.Parallel()
+	app := deployv1.App{
+		Metadata: deployv1.Metadata{Name: "a", Namespace: "ns"},
+		Workloads: []deployv1.Workload{{
+			Name: "web",
+			Endpoints: []deployv1.Endpoint{{
+				Name: "http", Port: 8080, Protocol: deployv1.ProtoHTTP,
+			}},
+		}},
+		Ingresses: []deployv1.Ingress{{
+			Routes: []deployv1.IngressRoute{{
+				Path:    "/api",
+				Backend: deployv1.EndpointRef{Workload: "web", Endpoint: "http"},
+			}},
+		}},
+	}
+	assignments := mapAssignments{
+		workloadmeta.AssignmentKey(app.Metadata, "web"): {
+			Node:   "node-b",
+			Status: workloadmeta.AssignmentStatusRunning,
+		},
+	}
+
+	got := ingress.CompileIngressRoutesFromDeployWithOptions(list.NewList(app), ingress.IngressCompileOptions{
+		DNS:         mapDNS{},
+		Assignments: assignments,
+		Cluster:     config.ClusterConfig{Nodes: map[string]string{"node-b": "http://node-b:17443"}},
+		Ingress:     config.IngressConfig{Listen: []string{":18080"}},
+		LocalNodeID: "node-a",
+	})
+
+	route, ok := got.Get(0)
+	if got.Len() != 1 || !ok || route.PathPrefix != "/api" || route.Upstream != "http://node-b:18080" || route.StripPrefix != "/" {
+		t.Fatalf("got %#v", got.Values())
+	}
+}
+
+func TestCompileIngressRoutesFromDeployLocalAssignmentWithoutDNSDefers(t *testing.T) {
+	t.Parallel()
+	app := deployv1.App{
+		Metadata: deployv1.Metadata{Name: "a", Namespace: "ns"},
+		Workloads: []deployv1.Workload{{
+			Name: "web",
+			Endpoints: []deployv1.Endpoint{{
+				Name: "http", Port: 8080, Protocol: deployv1.ProtoHTTP,
+			}},
+		}},
+		Ingresses: []deployv1.Ingress{{
+			Routes: []deployv1.IngressRoute{{
+				Path:    "/api",
+				Backend: deployv1.EndpointRef{Workload: "web", Endpoint: "http"},
+			}},
+		}},
+	}
+	assignments := mapAssignments{
+		workloadmeta.AssignmentKey(app.Metadata, "web"): {
+			Node:   "node-a",
+			Status: workloadmeta.AssignmentStatusRunning,
+		},
+	}
+
+	got := ingress.CompileIngressRoutesFromDeployWithOptions(list.NewList(app), ingress.IngressCompileOptions{
+		DNS:         mapDNS{},
+		Assignments: assignments,
+		Cluster:     config.ClusterConfig{Nodes: map[string]string{"node-a": "http://node-a:17443"}},
+		Ingress:     config.IngressConfig{Listen: []string{":18080"}},
+		LocalNodeID: "node-a",
+	})
+
+	if got.Len() != 0 {
+		t.Fatalf("got %#v", got.Values())
+	}
+}
+
+func TestNewIngressHTTPHandlerRemoteForwardPreservesPrefix(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeTestResponse(t, w, r.URL.Path)
+	}))
+	t.Cleanup(upstream.Close)
+
+	handler := testHTTPHandler(t, list.NewList(
+		config.IngressRoute{PathPrefix: "/api", Upstream: upstream.URL, StripPrefix: "/"},
+	))
+	req := newTestRequest(t, "http://127.0.0.1/api/v1/hello")
+	req.Host = "127.0.0.1"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	resp := rec.Result()
+	defer closeResponseBody(t, resp)
+	body := readResponseBody(t, resp)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	if string(body) != "/api/v1/hello" {
+		t.Fatalf("upstream saw path: got %q want %q", body, "/api/v1/hello")
 	}
 }

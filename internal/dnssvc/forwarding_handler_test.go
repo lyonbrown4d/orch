@@ -8,11 +8,14 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/dnsx/dnsserver"
 	"github.com/miekg/dns"
 
 	"github.com/lyonbrown4d/orch/internal/config"
+	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/dnssvc"
+	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
 
 func TestServiceForwardsNonOrchQueriesToWorkloadUpstream(t *testing.T) {
@@ -74,6 +77,53 @@ func TestServiceForwardsNonOrchQueriesToWorkloadUpstream(t *testing.T) {
 	}
 }
 
+type fakeAssignmentLookup struct {
+	items *list.List[workloadmeta.Assignment]
+}
+
+func (f fakeAssignmentLookup) ListWorkloadAssignments() *list.List[workloadmeta.Assignment] {
+	if f.items == nil {
+		return list.NewList[workloadmeta.Assignment]()
+	}
+	return f.items
+}
+
+func TestServiceAnswersWorkloadDNSFromReplicatedAssignment(t *testing.T) {
+	t.Parallel()
+
+	dnsCfg := config.DNSConfig{
+		Enabled: true,
+		Listen:  "127.0.0.1:0",
+		Zone:    "orch.local",
+	}
+	dnsCfg.Data.Path = filepath.Join(t.TempDir(), "dns.db")
+	assignments := fakeAssignmentLookup{items: list.NewList(workloadmeta.Assignment{
+		Metadata: deployv1.Metadata{Name: "demo", Namespace: "default"},
+		Workload: "remote",
+		Status:   workloadmeta.AssignmentStatusRunning,
+		Address:  "172.31.241.22",
+	})}
+	svc := dnssvc.NewWithAssignmentLookup(config.Config{DNS: dnsCfg}, testDNSLogger(), assignments)
+
+	ctx := context.Background()
+	if err := svc.Start(ctx); err != nil {
+		t.Fatalf("start service: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := svc.Stop(ctx); err != nil {
+			t.Fatalf("stop service: %v", err)
+		}
+	})
+
+	response := queryTestDNS(t, svc.UDPAddr(), "remote.default.svc.orch.local.", dns.TypeA)
+	if response.Rcode != dns.RcodeSuccess || len(response.Answer) != 1 {
+		t.Fatalf("assignment response rcode=%d answer=%#v", response.Rcode, response.Answer)
+	}
+	a, ok := response.Answer[0].(*dns.A)
+	if !ok || !a.A.Equal(net.ParseIP("172.31.241.22")) {
+		t.Fatalf("assignment answer = %#v", response.Answer[0])
+	}
+}
 func startTestDNSServer(t *testing.T, handler dns.HandlerFunc) string {
 	t.Helper()
 

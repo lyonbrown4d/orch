@@ -3,6 +3,8 @@ package ingress
 import (
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"strings"
 
 	"github.com/arcgolabs/collectionx/list"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/lyonbrown4d/orch/internal/config"
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
+	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
 
 func deployAppSortKey(m deployv1.Metadata) string {
@@ -21,15 +24,40 @@ type workloadIPv4Lookup interface {
 	LookupWorkloadIPv4(namespace, workloadName string) (string, bool)
 }
 
+type workloadAssignmentLookup interface {
+	GetWorkloadAssignment(key string) (workloadmeta.Assignment, bool)
+}
+
+// IngressCompileOptions controls deploy-document ingress route compilation.
+type IngressCompileOptions struct {
+	DNS         workloadIPv4Lookup
+	Assignments workloadAssignmentLookup
+	Cluster     config.ClusterConfig
+	Ingress     config.IngressConfig
+	LocalNodeID string
+	Log         *slog.Logger
+}
+
+type ingressRouteTarget struct {
+	upstream    string
+	stripPrefix string
+}
+
 // CompileIngressRoutesFromDeploy flattens app.ingresses into config routes pointing at workload
 // container IPs from dnssvc (HTTP endpoints only). Apps are ordered by namespace/name; first match wins.
 func CompileIngressRoutesFromDeploy(apps *list.List[deployv1.App], dns workloadIPv4Lookup, log *slog.Logger) *list.List[config.IngressRoute] {
-	if dns == nil || apps.Len() == 0 {
+	return CompileIngressRoutesFromDeployWithOptions(apps, IngressCompileOptions{DNS: dns, Log: log})
+}
+
+// CompileIngressRoutesFromDeployWithOptions flattens app.ingresses into data-plane routes. It prefers local
+// workload DNS records and falls back to forwarding through the assigned remote node's ingress listener.
+func CompileIngressRoutesFromDeployWithOptions(apps *list.List[deployv1.App], opts IngressCompileOptions) *list.List[config.IngressRoute] {
+	if apps == nil || apps.Len() == 0 {
 		return list.NewList[config.IngressRoute]()
 	}
 	out := list.NewList[config.IngressRoute]()
 	orderedApps(apps).Range(func(_ int, app deployv1.App) bool {
-		compileAppIngressRoutes(out, app, dns, log)
+		compileAppIngressRoutes(out, app, opts)
 		return true
 	})
 	return out
@@ -77,13 +105,12 @@ func workloadMap(app deployv1.App) *mapping.Map[string, deployv1.Workload] {
 	return out
 }
 
-func compileAppIngressRoutes(out *list.List[config.IngressRoute], app deployv1.App, dns workloadIPv4Lookup, log *slog.Logger) {
+func compileAppIngressRoutes(out *list.List[config.IngressRoute], app deployv1.App, opts IngressCompileOptions) {
 	ctx := ingressCompileContext{
 		app:       app,
 		namespace: strings.TrimSpace(app.Metadata.Namespace),
 		workloads: workloadMap(app),
-		dns:       dns,
-		log:       log,
+		opts:      opts,
 	}
 	app.IngressList().Range(func(_ int, ing deployv1.Ingress) bool {
 		ing.RouteList().Range(func(_ int, route deployv1.IngressRoute) bool {
@@ -100,8 +127,7 @@ type ingressCompileContext struct {
 	app       deployv1.App
 	namespace string
 	workloads *mapping.Map[string, deployv1.Workload]
-	dns       workloadIPv4Lookup
-	log       *slog.Logger
+	opts      IngressCompileOptions
 }
 
 func (c ingressCompileContext) compileRoute(route deployv1.IngressRoute) (config.IngressRoute, bool) {
@@ -119,11 +145,11 @@ func (c ingressCompileContext) compileRoute(route deployv1.IngressRoute) (config
 	if !ok {
 		return config.IngressRoute{}, false
 	}
-	ip, ok := c.workloadIP(workloadName)
+	target, ok := c.workloadTarget(workloadName, port)
 	if !ok {
 		return config.IngressRoute{}, false
 	}
-	return config.IngressRoute{PathPrefix: path, Upstream: fmt.Sprintf("http://%s:%d", ip, port)}, true
+	return config.IngressRoute{PathPrefix: path, Upstream: target.upstream, StripPrefix: target.stripPrefix}, true
 }
 
 func ingressPath(raw string) (string, bool) {
@@ -142,8 +168,8 @@ func (c ingressCompileContext) workload(name string) (deployv1.Workload, bool) {
 	if ok {
 		return workload, true
 	}
-	if c.log != nil {
-		c.log.Warn("ingress route skipped: unknown workload",
+	if c.opts.Log != nil {
+		c.opts.Log.Warn("ingress route skipped: unknown workload",
 			"app", c.app.Metadata.Name, "namespace", c.app.Metadata.Namespace, "workload", name)
 	}
 	return deployv1.Workload{}, false
@@ -154,23 +180,137 @@ func (c ingressCompileContext) endpointPort(workload deployv1.Workload, workload
 	if ok {
 		return port, true
 	}
-	if c.log != nil {
-		c.log.Warn("ingress route skipped: missing or non-http endpoint",
+	if c.opts.Log != nil {
+		c.opts.Log.Warn("ingress route skipped: missing or non-http endpoint",
 			"app", c.app.Metadata.Name, "workload", workloadName, "endpoint", endpointName)
 	}
 	return 0, false
 }
 
-func (c ingressCompileContext) workloadIP(workloadName string) (string, bool) {
-	ip, ok := c.dns.LookupWorkloadIPv4(c.namespace, workloadName)
-	if ok {
-		return ip, true
+func (c ingressCompileContext) workloadTarget(workloadName string, port int) (ingressRouteTarget, bool) {
+	if ip, ok := c.localWorkloadUpstream(workloadName, port); ok {
+		return ingressRouteTarget{upstream: ip}, true
 	}
-	if c.log != nil {
-		c.log.Debug("ingress route deferred: workload not in dns yet",
-			"app", c.app.Metadata.Name, "workload", workloadName)
+	if upstream, ok := c.remoteIngressUpstream(workloadName); ok {
+		return ingressRouteTarget{upstream: upstream, stripPrefix: "/"}, true
+	}
+	c.logDeferred(workloadName)
+	return ingressRouteTarget{}, false
+}
+
+func (c ingressCompileContext) localWorkloadUpstream(workloadName string, port int) (string, bool) {
+	if c.opts.DNS == nil {
+		return "", false
+	}
+	ip, ok := c.opts.DNS.LookupWorkloadIPv4(c.namespace, workloadName)
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("http://%s:%d", ip, port), true
+}
+
+func (c ingressCompileContext) remoteIngressUpstream(workloadName string) (string, bool) {
+	assignment, ok := c.runningAssignment(workloadName)
+	if !ok {
+		return "", false
+	}
+	if assignment.Node == strings.TrimSpace(c.opts.LocalNodeID) {
+		return "", false
+	}
+	return remoteIngressBaseURL(c.opts.Cluster, c.opts.Ingress, assignment.Node)
+}
+
+func (c ingressCompileContext) runningAssignment(workloadName string) (workloadmeta.Assignment, bool) {
+	if c.opts.Assignments == nil {
+		return workloadmeta.Assignment{}, false
+	}
+	assignment, ok := c.opts.Assignments.GetWorkloadAssignment(workloadmeta.AssignmentKey(c.app.Metadata, workloadName))
+	if !ok || assignment.Status != workloadmeta.AssignmentStatusRunning || strings.TrimSpace(assignment.Node) == "" {
+		return workloadmeta.Assignment{}, false
+	}
+	assignment.Node = strings.TrimSpace(assignment.Node)
+	return assignment, true
+}
+
+func (c ingressCompileContext) logDeferred(workloadName string) {
+	if c.opts.Log == nil {
+		return
+	}
+	c.opts.Log.Debug("ingress route deferred: workload has no local dns or remote ingress target",
+		"app", c.app.Metadata.Name, "workload", workloadName)
+}
+
+func remoteIngressBaseURL(cluster config.ClusterConfig, ingress config.IngressConfig, nodeID string) (string, bool) {
+	scheme, port, ok := ingressForwardEndpoint(ingress)
+	if !ok {
+		return "", false
+	}
+	apiURL, ok := cluster.NodeURL(nodeID)
+	if !ok {
+		return "", false
+	}
+	return ingressURLFromNodeAPI(apiURL, scheme, port)
+}
+
+func ingressForwardEndpoint(ingress config.IngressConfig) (string, string, bool) {
+	if port, ok := firstListenPort(ingress.PlainListenAddrList()); ok {
+		return "http", port, true
+	}
+	if port, ok := firstListenPort(ingress.TLSListenAddrList()); ok {
+		return "https", port, true
+	}
+	return "", "", false
+}
+
+func firstListenPort(addrs *list.List[string]) (string, bool) {
+	if addrs == nil {
+		return "", false
+	}
+	var port string
+	addrs.Range(func(_ int, addr string) bool {
+		if p, ok := listenPort(addr); ok {
+			port = p
+			return false
+		}
+		return true
+	})
+	return port, port != ""
+}
+
+func listenPort(addr string) (string, bool) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "", false
+	}
+	if _, port, err := net.SplitHostPort(addr); err == nil && port != "" {
+		return port, true
+	}
+	if strings.HasPrefix(addr, ":") {
+		port := strings.TrimPrefix(addr, ":")
+		return port, port != ""
 	}
 	return "", false
+}
+
+func ingressURLFromNodeAPI(apiURL, scheme, port string) (string, bool) {
+	raw := strings.TrimSpace(apiURL)
+	if raw == "" {
+		return "", false
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || strings.TrimSpace(u.Hostname()) == "" {
+		return "", false
+	}
+	u.Scheme = scheme
+	u.Host = net.JoinHostPort(u.Hostname(), port)
+	u.Path = ""
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return strings.TrimRight(u.String(), "/"), true
 }
 
 func endpointHTTPPort(w deployv1.Workload, endpointName string) (int, bool) {

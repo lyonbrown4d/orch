@@ -20,7 +20,7 @@ func Module() dix.Module {
 		"ingress",
 		dix.Providers(
 			dix.Provider0(newValeFactory),
-			dix.Provider5(newWithValeFactory, dix.Eager()),
+			dix.Provider6(newWithValeFactory, dix.Eager()),
 		),
 		dix.Invokes(
 			dix.Invoke3(func(logger *slog.Logger, cfg config.Config, _ *Service) {

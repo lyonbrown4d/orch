@@ -85,6 +85,9 @@ func (s *Service) deployOrderedWorkloads(ctx context.Context, meta deployv1.Meta
 }
 
 func (s *Service) deployOneWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, self, generation string) error {
+	if s.workloadConverged(meta, workload, generation) {
+		return nil
+	}
 	chosen, err := s.chooseWorkloadNode(ctx, workload, self)
 	if err != nil {
 		s.recordDeployFailure(ctx, meta, workload, "", generation, err)
@@ -97,12 +100,24 @@ func (s *Service) deployOneWorkload(ctx context.Context, meta deployv1.Metadata,
 	return s.deployLocalAssignedWorkload(ctx, meta, workload, chosen, generation)
 }
 
+func (s *Service) workloadConverged(meta deployv1.Metadata, workload deployv1.Workload, generation string) bool {
+	if s == nil || s.raft == nil {
+		return false
+	}
+	assignment, ok := s.raft.GetWorkloadAssignment(workloadmeta.AssignmentKey(meta, workload.Name))
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(assignment.Generation) == strings.TrimSpace(generation) && assignment.Status == workloadmeta.AssignmentStatusRunning
+}
+
 func (s *Service) deployRemoteWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID, generation string) error {
-	status, err := s.dispatchWorkload(ctx, meta, workload, nodeID)
+	result, err := s.dispatchWorkload(ctx, meta, workload, nodeID)
 	if err != nil {
 		s.recordDeployFailure(ctx, meta, workload, nodeID, generation, err)
 		return err
 	}
+	status := strings.TrimSpace(result.Status)
 	if status == "" {
 		status = "dispatched"
 	}
@@ -114,20 +129,19 @@ func (s *Service) deployRemoteWorkload(ctx context.Context, meta deployv1.Metada
 		Artifact: runconfig.ArtifactSummary(workload.Run),
 		Status:   status,
 	})
-	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, status, generation, "")
+	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, status, generation, "", result.Address)
 	return nil
 }
-
 func (s *Service) deployLocalAssignedWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID, generation string) error {
 	if err := s.deployLocalWorkload(ctx, meta, workload, nodeID); err != nil {
 		s.recordDeployFailure(ctx, meta, workload, nodeID, generation, err)
 		return err
 	}
-	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, workloadmeta.AssignmentStatusRunning, generation, "")
+	address := s.localWorkloadAddress(meta, workload.Name)
+	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, workloadmeta.AssignmentStatusRunning, generation, "", address)
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "success")
 	return nil
 }
-
 func (s *Service) recordDeployFailure(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID, generation string, err error) {
 	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, workloadmeta.AssignmentStatusFailed, generation, err.Error())
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
@@ -178,7 +192,7 @@ func assignmentNodeOrEmpty(raft *raftsvc.Service, meta deployv1.Metadata, worklo
 	return assignment.Node
 }
 
-func (s *Service) applyWorkloadAssignment(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID, status, generation, errMsg string) {
+func (s *Service) applyWorkloadAssignment(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID, status, generation, errMsg string, addresses ...string) {
 	if s == nil || s.raft == nil {
 		return
 	}
@@ -186,11 +200,16 @@ func (s *Service) applyWorkloadAssignment(ctx context.Context, meta deployv1.Met
 	if status == "" {
 		status = workloadmeta.AssignmentStatusAssigned
 	}
+	address := ""
+	if len(addresses) > 0 {
+		address = strings.TrimSpace(addresses[0])
+	}
 	assignment := workloadmeta.Assignment{
 		Key:        workloadmeta.AssignmentKey(meta, workload.Name),
 		Metadata:   meta,
 		Workload:   workload.Name,
 		Node:       strings.TrimSpace(nodeID),
+		Address:    address,
 		Runtime:    workload.Runtime,
 		Artifact:   runconfig.ArtifactSummary(workload.Run),
 		Status:     status,
@@ -208,23 +227,32 @@ func (s *Service) applyWorkloadAssignment(ctx context.Context, meta deployv1.Met
 		)
 	}
 }
-
-func (s *Service) dispatchWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (string, error) {
+func (s *Service) localWorkloadAddress(meta deployv1.Metadata, workloadName string) string {
+	if s == nil || s.dns == nil {
+		return ""
+	}
+	address, ok := s.dns.LookupLocalWorkloadIPv4(meta.Namespace, workloadName)
+	if !ok {
+		return ""
+	}
+	return address
+}
+func (s *Service) dispatchWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (DispatchResult, error) {
 	if s.dispatcher == nil {
-		return "", oopsx.B("task").Errorf("placement selected node %q for workload %q but worker dispatcher is unavailable", nodeID, workload.Name)
+		return DispatchResult{}, oopsx.B("task").Errorf("placement selected node %q for workload %q but worker dispatcher is unavailable", nodeID, workload.Name)
 	}
 	result, err := s.dispatcher.DispatchWorkload(ctx, nodeID, meta, workload)
 	if err != nil {
-		return "", oopsx.B("task").Wrapf(err, "dispatch workload %s to node %s", workload.Name, nodeID)
+		return DispatchResult{}, oopsx.B("task").Wrapf(err, "dispatch workload %s to node %s", workload.Name, nodeID)
 	}
 	status := strings.TrimSpace(result.Status)
 	if status == "" {
 		status = "dispatched"
 	}
+	result.Status = status
 	s.logger.Info("workload dispatched", "workload", workload.Name, "node", nodeID, "runtime", workload.Runtime, "status", status)
-	return status, nil
+	return result, nil
 }
-
 func (s *Service) deployLocalWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) error {
 	if err := s.runtime.Deploy(ctx, meta, workload); err != nil {
 		return oopsx.B("task").Wrapf(err, "deploy workload %s", workload.Name)

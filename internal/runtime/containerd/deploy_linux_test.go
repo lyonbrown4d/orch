@@ -111,7 +111,7 @@ func TestCRIContainerConfig(t *testing.T) {
 	if !slices.Equal(cfg.Command, []string{"sleep"}) || !slices.Equal(cfg.Args, []string{"60"}) {
 		t.Fatalf("argv = %#v %#v", cfg.Command, cfg.Args)
 	}
-	if len(cfg.Envs) != 1 || cfg.Envs[0].Key != "APP_ENV" || cfg.Envs[0].Value != "test" {
+	if len(cfg.Envs) != 1 || cfg.Envs[0].Key != "APP_ENV" || string(cfg.Envs[0].Value) != "test" {
 		t.Fatalf("envs = %#v", cfg.Envs)
 	}
 	res := cfg.GetLinux().GetResources()

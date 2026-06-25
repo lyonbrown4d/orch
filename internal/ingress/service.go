@@ -15,6 +15,7 @@ import (
 
 	"github.com/lyonbrown4d/orch/internal/config"
 	"github.com/lyonbrown4d/orch/internal/dnssvc"
+	"github.com/lyonbrown4d/orch/internal/nodeid"
 	"github.com/lyonbrown4d/orch/internal/raftsvc"
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
@@ -22,6 +23,8 @@ import (
 type Service struct {
 	logger        *slog.Logger
 	cfg           config.IngressConfig
+	cluster       config.ClusterConfig
+	localNodeID   string
 	raft          *raftsvc.Service
 	dns           *dnssvc.Service
 	dataRoot      string
@@ -36,17 +39,19 @@ type Service struct {
 }
 
 func New(cfg config.Config, logger *slog.Logger, raft *raftsvc.Service, dns *dnssvc.Service) *Service {
-	return newWithValeFactory(cfg, logger, raft, dns, newValeFactory())
+	return newWithValeFactory(cfg, logger, raft, dns, nodeid.Local{}, newValeFactory())
 }
 
-func newWithValeFactory(cfg config.Config, logger *slog.Logger, raft *raftsvc.Service, dns *dnssvc.Service, vale valeFactory) *Service {
+func newWithValeFactory(cfg config.Config, logger *slog.Logger, raft *raftsvc.Service, dns *dnssvc.Service, local nodeid.Local, vale valeFactory) *Service {
 	return &Service{
-		logger:   logger,
-		cfg:      cfg.Ingress,
-		raft:     raft,
-		dns:      dns,
-		vale:     vale,
-		dataRoot: config.DefaultDataRoot(),
+		logger:      logger,
+		cfg:         cfg.Ingress,
+		cluster:     cfg.Cluster,
+		localNodeID: strings.TrimSpace(local.String()),
+		raft:        raft,
+		dns:         dns,
+		vale:        vale,
+		dataRoot:    config.DefaultDataRoot(),
 	}
 }
 
@@ -55,7 +60,14 @@ func (s *Service) refreshRoutes() {
 		return
 	}
 	apps := s.raft.ListDesiredDeployApps()
-	routes := CompileIngressRoutesFromDeploy(apps, s.dns, s.logger)
+	routes := CompileIngressRoutesFromDeployWithOptions(apps, IngressCompileOptions{
+		DNS:         s.dns,
+		Assignments: s.raft,
+		Cluster:     s.cluster,
+		Ingress:     s.cfg,
+		LocalNodeID: s.localNodeID,
+		Log:         s.logger,
+	})
 	snapshot, routeCount, err := s.vale.build(routes)
 	if err != nil {
 		s.logger.Warn("ingress routes compile failed", "error", err)
@@ -71,7 +83,6 @@ func (s *Service) refreshRoutes() {
 	log := s.logger.With(slog.String("component", "ingress"))
 	log.Info("ingress routes refreshed", "routes", routeCount)
 }
-
 func (s *Service) Start(ctx context.Context) error {
 	if !s.cfg.Enabled {
 		s.logger.Info("ingress disabled by config")

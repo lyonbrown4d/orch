@@ -22,14 +22,20 @@ type Service struct {
 	store           *dnsserver.BboltStore
 	server          *dnsserver.Server
 	workloadRecords *mapping.ShardedConcurrentMap[string, dnsserver.Record]
+	assignments     workloadAssignmentLookup
 	started         atomic.Bool
 }
 
 func New(cfg config.Config, logger *slog.Logger) *Service {
+	return NewWithAssignmentLookup(cfg, logger, nil)
+}
+
+func NewWithAssignmentLookup(cfg config.Config, logger *slog.Logger, assignments workloadAssignmentLookup) *Service {
 	return &Service{
 		logger:          logger,
 		cfg:             cfg.DNS,
 		workloadRecords: mapping.NewShardedConcurrentMap[string, dnsserver.Record](0, mapping.HashString),
+		assignments:     assignments,
 	}
 }
 
@@ -76,11 +82,10 @@ func (s *Service) newServer(ctx context.Context, store *dnsserver.BboltStore) (*
 }
 
 func (s *Service) serverOptions(resolver *dnsserver.Resolver, upstreams *list.List[string]) []dnsserver.Option {
-	options := []dnsserver.Option{dnsserver.WithLogger(s.logger)}
-	if upstreams.Len() > 0 {
-		options = append(options, dnsserver.WithHandler(newForwardingHandler(resolver, upstreams, s.logger)))
+	return []dnsserver.Option{
+		dnsserver.WithLogger(s.logger),
+		dnsserver.WithHandler(newForwardingHandler(resolver, upstreams, s.logger, s.cfg.ZoneName(), s)),
 	}
-	return options
 }
 
 func (s *Service) closeStoreAfterStartFailure(store *dnsserver.BboltStore) {

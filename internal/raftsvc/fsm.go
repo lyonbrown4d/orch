@@ -180,6 +180,7 @@ func normalizeAssignment(assignment workloadmeta.Assignment) (workloadmeta.Assig
 	assignment.Metadata.Namespace = strings.TrimSpace(assignment.Metadata.Namespace)
 	assignment.Workload = strings.TrimSpace(assignment.Workload)
 	assignment.Node = strings.TrimSpace(assignment.Node)
+	assignment.Address = strings.TrimSpace(assignment.Address)
 	assignment.Status = strings.TrimSpace(assignment.Status)
 	if assignment.Metadata.Name == "" || assignment.Workload == "" {
 		return workloadmeta.Assignment{}, false

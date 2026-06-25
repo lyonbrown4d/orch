@@ -27,7 +27,7 @@ func Module() dix.Module {
 			dix.Provider1(func(cfg config.Config) task.WorkerDispatcher {
 				return task.NewHTTPWorkerDispatcher(cfg)
 			}),
-			dix.Provider5(task.NewBundle),
+			dix.Provider6(task.NewBundle),
 			dix.Provider1(registry.NewService),
 			dix.Provider6(task.NewService, dix.Eager()),
 		),

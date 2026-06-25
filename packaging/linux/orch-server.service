@@ -1,0 +1,16 @@
+[Unit]
+Description=orch control plane server
+Documentation=https://github.com/lyonbrown4d/orch
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/orch/env
+ExecStart=/usr/bin/orch-server
+Restart=on-failure
+RestartSec=5s
+StateDirectory=orch
+
+[Install]
+WantedBy=multi-user.target

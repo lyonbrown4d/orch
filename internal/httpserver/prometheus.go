@@ -10,12 +10,12 @@ import (
 	"github.com/lyonbrown4d/orch/internal/observability"
 )
 
-// attachFiberPrometheus registers HTTP middleware and the scrape route on the shared Prometheus
+// AttachFiberPrometheus registers HTTP middleware and the scrape route on the shared Prometheus
 // registry from observability, so orch_* application metrics and http_fiber_* metrics share one
 // endpoint.
 //
 // Metrics follow the upstream fiberprometheus middleware behavior.
-func attachFiberPrometheus(app *fiber.App, cfg config.Config, obs *observability.Service) {
+func AttachFiberPrometheus(app *fiber.App, cfg config.Config, obs *observability.Service) {
 	reg := obs.PrometheusRegistry()
 	if reg == nil {
 		return

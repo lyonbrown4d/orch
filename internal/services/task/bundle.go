@@ -1,6 +1,7 @@
 package task
 
 import (
+	"github.com/lyonbrown4d/orch/internal/dnssvc"
 	"github.com/lyonbrown4d/orch/internal/nodecapacity"
 	"github.com/lyonbrown4d/orch/internal/nodeid"
 	"github.com/lyonbrown4d/orch/internal/placement"
@@ -14,9 +15,10 @@ type Bundle struct {
 	Placement  *placement.Engine
 	Raft       *raftsvc.Service
 	Dispatcher WorkerDispatcher
+	DNS        *dnssvc.Service
 }
 
-// NewBundle wires catalog, placement engine, resolved node id, and raft for deploy replication.
-func NewBundle(local nodeid.Local, cat *nodecapacity.Catalog, eng *placement.Engine, rs *raftsvc.Service, dispatcher WorkerDispatcher) Bundle {
-	return Bundle{LocalNode: local, Catalog: cat, Placement: eng, Raft: rs, Dispatcher: dispatcher}
+// NewBundle wires catalog, placement engine, resolved node id, raft, dispatcher, and DNS for deploy replication.
+func NewBundle(local nodeid.Local, cat *nodecapacity.Catalog, eng *placement.Engine, rs *raftsvc.Service, dispatcher WorkerDispatcher, dns *dnssvc.Service) Bundle {
+	return Bundle{LocalNode: local, Catalog: cat, Placement: eng, Raft: rs, Dispatcher: dispatcher, DNS: dns}
 }

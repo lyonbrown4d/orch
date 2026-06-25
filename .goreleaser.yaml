@@ -120,6 +120,33 @@ nfpms:
       - rpm
       - apk
     bindir: /usr/bin
+    contents:
+      - src: packaging/linux/orch-server.service
+        dst: /usr/lib/systemd/system/orch-server.service
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - type: dir
+        dst: /etc/orch
+        file_info:
+          mode: 0755
+          owner: root
+          group: root
+      - src: packaging/linux/orch.env
+        dst: /etc/orch/env
+        type: config|noreplace
+        file_info:
+          mode: 0644
+          owner: root
+          group: root
+      - type: dir
+        dst: /var/lib/orch
+        file_info:
+          mode: 0755
+          owner: root
+          group: root
     scripts:
       postinstall: packaging/linux/postinstall.sh
+      preremove: packaging/linux/preremove.sh
       postremove: packaging/linux/postremove.sh

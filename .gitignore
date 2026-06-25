@@ -90,3 +90,9 @@ data
 .orch-resource-bench/
 .vagrant/
 .vagrant-home/
+.orch-systemd-smoke/
+.orch-docker-raft-ingress/
+.orch-docker-raft-nextcloud/
+.orch-docker-raft-seaweed/
+.orch-docker-raft-kafka/
+.orch-docker-raft-postgres-ha/

@@ -24,7 +24,7 @@ type Server struct {
 
 func New(cfg config.Config, logger *slog.Logger, guard *authhttp.Guard, obs *observability.Service) (*Server, error) {
 	fiberApp, rt := newFiberAppAndRuntime(cfg, logger, guard)
-	attachFiberPrometheus(fiberApp, cfg, obs)
+	AttachFiberPrometheus(fiberApp, cfg, obs)
 
 	return &Server{
 		logger:   logger,

@@ -12,6 +12,7 @@ type Assignment struct {
 	Metadata   deployv1.Metadata    `json:"metadata"`
 	Workload   string               `json:"workload"`
 	Node       string               `json:"node"`
+	Address    string               `json:"address,omitempty"`
 	Runtime    deployv1.RuntimeKind `json:"runtime"`
 	Artifact   string               `json:"artifact"`
 	Status     string               `json:"status"`

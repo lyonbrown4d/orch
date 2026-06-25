@@ -20,13 +20,13 @@ func (s *Service) SubmitDelete(ctx context.Context, meta deployv1.Metadata) erro
 		return oopsx.B("task").Errorf("raft service unavailable")
 	}
 	app, ok := s.raft.GetDesiredDeployApp(meta)
+	if err := s.raft.ApplyDeleteDeployApp(ctx, meta); err != nil {
+		return oopsx.B("task").Wrapf(err, "delete desired app")
+	}
 	if ok {
 		if err := s.stopAppWorkloads(ctx, &app); err != nil {
 			return err
 		}
-	}
-	if err := s.raft.ApplyDeleteDeployApp(ctx, meta); err != nil {
-		return oopsx.B("task").Wrapf(err, "delete desired app")
 	}
 	s.logger.Info("deploy deleted", "app", meta.Name, "namespace", workloadmeta.NamespaceOrDefault(meta.Namespace))
 	return nil
@@ -143,19 +143,22 @@ func (s *Service) stopLocalWorkload(ctx context.Context, meta deployv1.Metadata,
 
 // DeployWorkerWorkload executes a workload assigned by another node. It intentionally bypasses Raft desired-state
 // mutation; callers must already have gone through SubmitDeploy on the scheduling node.
-func (s *Service) DeployWorkerWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignedNode string) error {
+type WorkerDeployResult struct {
+	Address string
+}
+
+func (s *Service) DeployWorkerWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignedNode string) (WorkerDeployResult, error) {
 	if err := s.validateWorkerWorkload(meta, workload, assignedNode); err != nil {
-		return err
+		return WorkerDeployResult{}, err
 	}
 	self := s.local.String()
 	if err := s.deployLocalWorkload(ctx, meta, workload, self); err != nil {
 		s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
-		return err
+		return WorkerDeployResult{}, err
 	}
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "success")
-	return nil
+	return WorkerDeployResult{Address: s.localWorkloadAddress(meta, workload.Name)}, nil
 }
-
 func (s *Service) StopWorkerWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignedNode string) error {
 	if err := s.validateWorkerWorkload(meta, workload, assignedNode); err != nil {
 		return err

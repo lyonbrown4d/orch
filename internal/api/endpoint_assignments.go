@@ -43,6 +43,7 @@ func (e *AssignmentsEndpoint) Handle(_ context.Context, _ *EmptyInput) (*ListAss
 				Metadata:   assignment.Metadata,
 				Workload:   assignment.Workload,
 				Node:       assignment.Node,
+				Address:    assignment.Address,
 				Runtime:    assignment.Runtime,
 				Artifact:   assignment.Artifact,
 				Status:     assignment.Status,

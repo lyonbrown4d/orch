@@ -1,0 +1,209 @@
+// Integration smoke: production-shaped SeaweedFS on the Docker provider.
+// The smoke script starts a 3-node orch cluster and deploys this file via orch-cli.
+
+app {
+  name = "seaweed-smoke"
+  namespace = "default"
+
+  docker {
+    network = "orch-raft-seaweed-smoke"
+  }
+
+  stateful seaweedmastera {
+    image = "chrislusf/seaweedfs:3.85"
+    preferred_nodes = ["node-a"]
+    args = [
+      "master",
+      "-ip=seaweedmastera.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=9333",
+      "-peers=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-raftBootstrap",
+    ]
+
+    http(9333)
+  }
+
+  stateful seaweedmasterb {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera]
+    preferred_nodes = ["node-b"]
+    args = [
+      "master",
+      "-ip=seaweedmasterb.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=9333",
+      "-peers=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+    ]
+
+    http(9333)
+  }
+
+  stateful seaweedmasterc {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb]
+    preferred_nodes = ["node-c"]
+    args = [
+      "master",
+      "-ip=seaweedmasterc.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=9333",
+      "-peers=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+    ]
+
+    http(9333)
+  }
+
+  stateful seaweedvolumea {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc]
+    preferred_nodes = ["node-a"]
+    args = [
+      "volume",
+      "-mserver=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-ip=seaweedvolumea.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=8080",
+      "-dir=/data",
+      "-max=2",
+    ]
+
+    http(8080)
+  }
+
+  stateful seaweedvolumeb {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc]
+    preferred_nodes = ["node-b"]
+    args = [
+      "volume",
+      "-mserver=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-ip=seaweedvolumeb.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=8080",
+      "-dir=/data",
+      "-max=2",
+    ]
+
+    http(8080)
+  }
+
+  stateful seaweedvolumec {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc]
+    preferred_nodes = ["node-c"]
+    args = [
+      "volume",
+      "-mserver=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-ip=seaweedvolumec.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=8080",
+      "-dir=/data",
+      "-max=2",
+    ]
+
+    http(8080)
+  }
+
+  service seaweedfilera {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc, seaweedvolumea, seaweedvolumeb, seaweedvolumec]
+    preferred_nodes = ["node-a"]
+    args = [
+      "filer",
+      "-master=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-ip=seaweedfilera.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=8888",
+    ]
+
+    http(8888)
+  }
+
+  service seaweedfilerb {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc, seaweedvolumea, seaweedvolumeb, seaweedvolumec]
+    preferred_nodes = ["node-b"]
+    args = [
+      "filer",
+      "-master=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-ip=seaweedfilerb.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=8888",
+    ]
+
+    http(8888)
+  }
+
+  service seaweedfilerc {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc, seaweedvolumea, seaweedvolumeb, seaweedvolumec]
+    preferred_nodes = ["node-c"]
+    args = [
+      "filer",
+      "-master=seaweedmastera.default.svc.orch.local:9333,seaweedmasterb.default.svc.orch.local:9333,seaweedmasterc.default.svc.orch.local:9333",
+      "-ip=seaweedfilerc.default.svc.orch.local",
+      "-ip.bind=0.0.0.0",
+      "-port=8888",
+    ]
+
+    http(8888)
+  }
+
+  service seaweeds3 {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedfilera, seaweedfilerb, seaweedfilerc]
+    preferred_nodes = ["node-b"]
+    args = [
+      "s3",
+      "-filer=seaweedfilera.default.svc.orch.local:8888",
+      "-ip.bind=0.0.0.0",
+      "-port=8333",
+    ]
+
+    http(8333)
+  }
+
+  service seaweedwebdav {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedfilera, seaweedfilerb, seaweedfilerc]
+    preferred_nodes = ["node-c"]
+    args = [
+      "webdav",
+      "-filer=seaweedfilera.default.svc.orch.local:8888",
+      "-port=7333",
+    ]
+
+    http(7333)
+  }
+
+  worker seaweedadmin {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedmastera, seaweedmasterb, seaweedmasterc, seaweedfilera]
+    preferred_nodes = ["node-a"]
+    command = ["/bin/sh", "-c"]
+    args = ["while true; do wget -q -O - http://seaweedmastera.default.svc.orch.local:9333/ >/dev/null && wget -q -O - http://seaweedfilera.default.svc.orch.local:8888/ >/dev/null; sleep 15; done"]
+  }
+
+  worker seaweedworker {
+    image = "chrislusf/seaweedfs:3.85"
+    depends_on = [seaweedfilera, seaweedfilerb, seaweedfilerc]
+    preferred_nodes = ["node-b"]
+    command = ["/bin/sh", "-c"]
+    args = ["while true; do wget -q -O - http://seaweedfilera.default.svc.orch.local:8888/ >/dev/null; sleep 15; done"]
+  }
+
+  ingress public {
+    path "/s3" {
+      workload = seaweeds3
+    }
+
+    path "/webdav" {
+      workload = seaweedwebdav
+    }
+
+    path "/" {
+      workload = seaweedfilera
+    }
+  }
+}

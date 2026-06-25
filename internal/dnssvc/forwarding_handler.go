@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/arcgolabs/collectionx/list"
@@ -13,29 +15,41 @@ import (
 
 const workloadDNSForwardTimeout = 2 * time.Second
 
+type workloadIPv4Lookup interface {
+	LookupWorkloadIPv4(namespace, workloadName string) (string, bool)
+}
+
 type forwardingHandler struct {
 	resolver  *dnsserver.Resolver
 	upstreams *list.List[string]
 	logger    *slog.Logger
+	zone      string
+	workloads workloadIPv4Lookup
 }
 
 // NewForwardingHandler builds the workload DNS forwarding handler.
 func NewForwardingHandler(resolver *dnsserver.Resolver, upstreams *list.List[string], logger *slog.Logger) dns.Handler {
+	return newForwardingHandler(resolver, upstreams, logger, "orch.local", nil)
+}
+
+func newForwardingHandler(resolver *dnsserver.Resolver, upstreams *list.List[string], logger *slog.Logger, zone string, workloads workloadIPv4Lookup) dns.Handler {
 	if upstreams == nil {
 		upstreams = list.NewList[string]()
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
+	zone = strings.Trim(strings.ToLower(strings.TrimSpace(zone)), ".")
+	if zone == "" {
+		zone = "orch.local"
+	}
 	return &forwardingHandler{
 		resolver:  resolver,
 		upstreams: upstreams,
 		logger:    logger,
+		zone:      zone,
+		workloads: workloads,
 	}
-}
-
-func newForwardingHandler(resolver *dnsserver.Resolver, upstreams *list.List[string], logger *slog.Logger) dns.Handler {
-	return NewForwardingHandler(resolver, upstreams, logger)
 }
 
 func (h *forwardingHandler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg) {
@@ -67,6 +81,9 @@ func (h *forwardingHandler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg
 		writeDNSReply(h.logger, writer, reply)
 		return
 	}
+	if h.writeDynamicWorkloadA(writer, request, reply, resolution.RCode) {
+		return
+	}
 	if resolution.RCode == dns.RcodeRefused && h.upstreams.Len() > 0 {
 		h.forward(writer, request)
 		return
@@ -78,6 +95,41 @@ func (h *forwardingHandler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg
 	reply.Ns = resolution.Authority
 	reply.Extra = resolution.Extra
 	writeDNSReply(h.logger, writer, reply)
+}
+
+func (h *forwardingHandler) writeDynamicWorkloadA(writer dns.ResponseWriter, request *dns.Msg, reply *dns.Msg, rcode int) bool {
+	if h.workloads == nil || (rcode != dns.RcodeNameError && rcode != dns.RcodeRefused) {
+		return false
+	}
+	question := request.Question[0]
+	if question.Qtype != dns.TypeA && question.Qtype != dns.TypeANY {
+		return false
+	}
+	namespace, workload, ok := parseWorkloadServiceFQDN(question.Name, h.zone)
+	if !ok {
+		return false
+	}
+	address, ok := h.workloads.LookupWorkloadIPv4(namespace, workload)
+	if !ok {
+		return false
+	}
+	ip := net.ParseIP(address).To4()
+	if ip == nil {
+		return false
+	}
+	reply.Rcode = dns.RcodeSuccess
+	reply.Authoritative = true
+	reply.Answer = []dns.RR{&dns.A{
+		Hdr: dns.RR_Header{
+			Name:   dns.Fqdn(question.Name),
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    60,
+		},
+		A: ip,
+	}}
+	writeDNSReply(h.logger, writer, reply)
+	return true
 }
 
 func (h *forwardingHandler) forward(writer dns.ResponseWriter, request *dns.Msg) {

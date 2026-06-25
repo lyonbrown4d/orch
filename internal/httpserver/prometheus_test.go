@@ -1,8 +1,10 @@
-package httpserver
+package httpserver_test
 
 import (
+	"context"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	prom "github.com/prometheus/client_golang/prometheus"
 
 	"github.com/lyonbrown4d/orch/internal/config"
+	"github.com/lyonbrown4d/orch/internal/httpserver"
 	"github.com/lyonbrown4d/orch/internal/observability"
 )
 
@@ -26,20 +29,30 @@ func TestAttachFiberPrometheusRecordsHTTPMetrics(t *testing.T) {
 	}
 
 	app := fiber.New()
-	attachFiberPrometheus(app, cfg, obs)
+	httpserver.AttachFiberPrometheus(app, cfg, obs)
 	app.Get("/hello", func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 
-	if _, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/hello", nil), fiber.TestConfig{Timeout: 0}); err != nil {
-		t.Fatalf("GET /hello: %v", err)
+	helloReq := httptest.NewRequestWithContext(context.Background(), fiber.MethodGet, "/hello", http.NoBody)
+	helloResp, testErr := app.Test(helloReq, fiber.TestConfig{Timeout: 0})
+	if testErr != nil {
+		t.Fatalf("GET /hello: %v", testErr)
+	}
+	if closeErr := helloResp.Body.Close(); closeErr != nil {
+		t.Fatalf("close hello body: %v", closeErr)
 	}
 
-	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/metrics", nil), fiber.TestConfig{Timeout: 0})
+	metricsReq := httptest.NewRequestWithContext(context.Background(), fiber.MethodGet, "/metrics", http.NoBody)
+	resp, err := app.Test(metricsReq, fiber.TestConfig{Timeout: 0})
 	if err != nil {
 		t.Fatalf("GET /metrics: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Errorf("close metrics body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

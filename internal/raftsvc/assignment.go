@@ -23,6 +23,7 @@ func (s *Service) ApplyWorkloadAssignment(ctx context.Context, assignment worklo
 	assignment.Metadata.Namespace = strings.TrimSpace(assignment.Metadata.Namespace)
 	assignment.Workload = strings.TrimSpace(assignment.Workload)
 	assignment.Node = strings.TrimSpace(assignment.Node)
+	assignment.Address = strings.TrimSpace(assignment.Address)
 	assignment.Status = strings.TrimSpace(assignment.Status)
 	if assignment.Metadata.Name == "" {
 		return oopsx.B("raft").Errorf("assignment metadata.name is required")

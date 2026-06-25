@@ -105,11 +105,38 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-raft-forwarding-smoke.ps1 {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
+  smoke:docker-raft-ingress:
+    desc: "Run a Docker 3-node Raft cluster smoke with whoami behind ingress"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-ingress-smoke.ps1 {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
 
+
+  smoke:docker-raft-nextcloud:
+    desc: "Run a Docker 3-node Raft cluster smoke with Nextcloud, Postgres, and Redis"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:docker-raft-seaweed:
+    desc: "Run a Docker 3-node Raft cluster smoke with SeaweedFS master, volume, and filer"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
   smoke:vagrant:
     desc: "Run a 3-node Vagrant smoke test (deploy -> status -> delete)"
     cmds:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/vagrant/smoke.ps1 {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:systemd-docker:
+    desc: "Run package + systemd install smoke inside a privileged Docker container"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/systemd-docker-smoke.ps1 {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
 

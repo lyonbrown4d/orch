@@ -94,10 +94,15 @@ func sortedConfiguredNodeIDs(nodes map[string]string) []string {
 	return nodeIDs.Values()
 }
 
-func (s *Service) runWorkloadOnNode(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (string, error) {
+type workloadRunResult struct {
+	Status  string
+	Address string
+}
+
+func (s *Service) runWorkloadOnNode(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (workloadRunResult, error) {
 	nodeID = strings.TrimSpace(nodeID)
 	if nodeID == "" {
-		return "", oopsx.B("task").Errorf("empty target node for workload %q", workload.Name)
+		return workloadRunResult{}, oopsx.B("task").Errorf("empty target node for workload %q", workload.Name)
 	}
 	if nodeID == s.local.String() {
 		return s.runLocalWorkload(ctx, meta, workload, nodeID)
@@ -105,11 +110,12 @@ func (s *Service) runWorkloadOnNode(ctx context.Context, meta deployv1.Metadata,
 	return s.runRemoteWorkload(ctx, meta, workload, nodeID)
 }
 
-func (s *Service) runRemoteWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (string, error) {
-	status, err := s.dispatchWorkload(ctx, meta, workload, nodeID)
+func (s *Service) runRemoteWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (workloadRunResult, error) {
+	result, err := s.dispatchWorkload(ctx, meta, workload, nodeID)
 	if err != nil {
-		return "", err
+		return workloadRunResult{}, err
 	}
+	status := strings.TrimSpace(result.Status)
 	if status == "" {
 		status = "dispatched"
 	}
@@ -120,12 +126,12 @@ func (s *Service) runRemoteWorkload(ctx context.Context, meta deployv1.Metadata,
 		Artifact: runconfig.ArtifactSummary(workload.Run),
 		Status:   status,
 	})
-	return status, nil
+	return workloadRunResult{Status: status, Address: strings.TrimSpace(result.Address)}, nil
 }
 
-func (s *Service) runLocalWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (string, error) {
+func (s *Service) runLocalWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) (workloadRunResult, error) {
 	if err := s.deployLocalWorkload(ctx, meta, workload, nodeID); err != nil {
-		return "", err
+		return workloadRunResult{}, err
 	}
-	return workloadmeta.AssignmentStatusRunning, nil
+	return workloadRunResult{Status: workloadmeta.AssignmentStatusRunning, Address: s.localWorkloadAddress(meta, workload.Name)}, nil
 }

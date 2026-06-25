@@ -1,0 +1,18 @@
+FROM debian:12-slim
+
+ENV container=docker
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        dbus \
+        procps \
+        systemd \
+        systemd-sysv \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+STOPSIGNAL SIGRTMIN+3
+
+CMD ["/sbin/init"]

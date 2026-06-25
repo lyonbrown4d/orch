@@ -11,19 +11,19 @@ require (
 	github.com/arcgolabs/authx v0.3.2
 	github.com/arcgolabs/authx/http/fiber v0.4.0
 	github.com/arcgolabs/authx/jwt v0.3.0
-	github.com/arcgolabs/clientx v0.1.2
+	github.com/arcgolabs/clientx v0.1.3
 	github.com/arcgolabs/collectionx/graph v0.9.0
 	github.com/arcgolabs/collectionx/list v0.9.0
 	github.com/arcgolabs/collectionx/mapping v0.9.0
 	github.com/arcgolabs/collectionx/set v0.9.0
-	github.com/arcgolabs/configx v0.5.2
-	github.com/arcgolabs/configx/format/hcl v0.0.0-20260517161814-12696a4be3fe
+	github.com/arcgolabs/configx v0.6.1
+	github.com/arcgolabs/configx/format/hcl v0.6.1
 	github.com/arcgolabs/dix v0.11.1
 	github.com/arcgolabs/dnsx/dnsserver v0.1.3
 	github.com/arcgolabs/httpx v0.1.8
 	github.com/arcgolabs/httpx/adapter/fiber v0.1.8
 	github.com/arcgolabs/logx v0.1.3
-	github.com/arcgolabs/mapper v0.2.0
+	github.com/arcgolabs/mapper v0.2.1
 	github.com/arcgolabs/observabilityx v0.4.0
 	github.com/arcgolabs/plano v0.8.0
 	github.com/arcgolabs/plano/lsp v0.8.0
@@ -254,7 +254,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.5 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
@@ -264,8 +264,8 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.46.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260615183401-62b3387ff324 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260615183401-62b3387ff324 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260622175928-b703f567277d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

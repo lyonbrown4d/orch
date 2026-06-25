@@ -6,14 +6,18 @@ import (
 
 	"github.com/arcgolabs/dix"
 
+	"github.com/lyonbrown4d/orch/internal/config"
 	"github.com/lyonbrown4d/orch/internal/lifecycleplan"
+	"github.com/lyonbrown4d/orch/internal/raftsvc"
 )
 
 func Module() dix.Module {
 	return dix.NewModule(
 		"dns",
 		dix.Providers(
-			dix.Provider2(New, dix.Eager()),
+			dix.Provider3(func(cfg config.Config, logger *slog.Logger, raft *raftsvc.Service) *Service {
+				return NewWithAssignmentLookup(cfg, logger, raft)
+			}, dix.Eager()),
 		),
 		dix.Hooks(
 			dix.OnStart2(func(ctx context.Context, logger *slog.Logger, s *Service) error {

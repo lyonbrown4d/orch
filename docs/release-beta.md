@@ -59,6 +59,12 @@ task smoke:local-podman-dns
 task smoke:local-podman-worker-dispatch
 ```
 
+Run the package/systemd smoke on hosts that allow privileged Docker containers:
+
+```powershell
+task smoke:systemd-docker
+```
+
 `smoke:local-docker` and `smoke:local-podman` require Docker/Podman respectively.
 `smoke:local-docker-dns` and `smoke:local-podman-dns` additionally require host
 DNS port `53` availability.
@@ -77,7 +83,9 @@ task release-gate
 ```
 
 `release-gate:static` runs the non-runtime checks plus the local Raft forwarding
-smoke. `release-gate` adds runtime smoke coverage.
+smoke. `release-gate` adds runtime smoke coverage. `smoke:systemd-docker` is
+kept separate because it requires privileged Docker and systemd-in-container
+support.
 
 ## Tagging
 

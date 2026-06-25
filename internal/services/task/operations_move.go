@@ -98,6 +98,10 @@ func (s *Service) stopMovePlans(ctx context.Context, meta deployv1.Metadata, ope
 		}
 		if err := s.stopWorkload(ctx, meta, plan.workload); err != nil {
 			s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.current, workloadmeta.AssignmentStatusFailed, generation, err.Error())
+			if operation == OperationFailover {
+				s.logger.Warn("failover continuing after source stop failed", "workload", plan.workload.Name, "source_node", plan.current, "error", err)
+				continue
+			}
 			return err
 		}
 		s.applyWorkloadAssignment(ctx, meta, plan.workload, plan.current, workloadmeta.AssignmentStatusStopped, generation, "")

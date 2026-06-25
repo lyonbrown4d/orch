@@ -143,9 +143,45 @@ func (s *Service) deployLocalAssignedWorkload(ctx context.Context, meta deployv1
 	return nil
 }
 func (s *Service) recordDeployFailure(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID, generation string, err error) {
+	if s.skipStaleDeployFailure(meta, workload.Name, nodeID, generation) {
+		s.logger.Warn("skip stale deploy failure after workload converged elsewhere", "workload", workload.Name, "failed_node", nodeID, "error", err)
+		return
+	}
 	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, workloadmeta.AssignmentStatusFailed, generation, err.Error())
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
 	s.metrics.IncDeployApp(ctx, "failed")
+}
+
+func (s *Service) skipStaleDeployFailure(meta deployv1.Metadata, workloadName, failedNodeID, generation string) bool {
+	if s == nil || s.raft == nil {
+		return false
+	}
+	assignment, ok := s.raft.GetWorkloadAssignment(workloadmeta.AssignmentKey(meta, workloadName))
+	if !ok {
+		return false
+	}
+	return assignmentConvergedOnDifferentNode(assignment, failedNodeID, generation)
+}
+
+func assignmentConvergedOnDifferentNode(assignment workloadmeta.Assignment, failedNodeID, generation string) bool {
+	if strings.TrimSpace(assignment.Generation) != strings.TrimSpace(generation) {
+		return false
+	}
+	if !assignmentConvergedStatus(assignment.Status) {
+		return false
+	}
+	currentNode := strings.TrimSpace(assignment.Node)
+	failedNodeID = strings.TrimSpace(failedNodeID)
+	return currentNode != "" && failedNodeID != "" && currentNode != failedNodeID
+}
+
+func assignmentConvergedStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case workloadmeta.AssignmentStatusAssigned, workloadmeta.AssignmentStatusRunning:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) chooseWorkloadNode(ctx context.Context, workload deployv1.Workload, self string) (string, error) {

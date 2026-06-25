@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("nextcloud", "seaweed")]
+    [ValidateSet("placement", "nextcloud", "seaweed")]
     [string]$Scenario = "nextcloud",
     [string]$Manifest = "",
     [string]$ImageTag = "",
@@ -24,6 +24,20 @@ Set-Location $repoRoot
 function New-ScenarioConfig {
     param([Parameter(Mandatory = $true)][string]$Name)
     switch ($Name.ToLowerInvariant()) {
+        "placement" {
+            return [pscustomobject]@{
+                Slug = "placement"
+                AppName = "placement-smoke"
+                DefaultSubnet = "172.31.242.0/24"
+                DefaultNetwork = "orch-raft-placement-smoke"
+                DefaultManifest = "examples/integration/placement.orch"
+                APIBase = 18401
+                IngressBase = 18380
+                Workloads = @("whoami")
+                WorkloadNodes = @{ whoami = "node-b" }
+                DescribeWorkload = "whoami"
+            }
+        }
         "nextcloud" {
             return [pscustomobject]@{
                 Slug = "nextcloud"
@@ -280,6 +294,72 @@ function Find-LeaderNode {
 }
 
 
+function Find-NodeByID {
+    param([Parameter(Mandatory = $true)][string]$NodeID)
+    $found = $nodes | Where-Object { $_.ID -eq $NodeID } | Select-Object -First 1
+    if ($null -eq $found) {
+        throw "Node not found: $NodeID"
+    }
+    return $found
+}
+
+function Select-NodeExcept {
+    param([string[]]$Excluded = @())
+    $excludedSet = @{}
+    foreach ($id in $Excluded) {
+        if (-not [string]::IsNullOrWhiteSpace($id)) {
+            $excludedSet[$id] = $true
+        }
+    }
+    $found = $nodes | Where-Object { -not $excludedSet.ContainsKey($_.ID) } | Select-Object -First 1
+    if ($null -eq $found) {
+        throw "No node available after exclusions: $($Excluded -join ',')"
+    }
+    return $found
+}
+
+function Select-NonLeaderNode {
+    param([Parameter(Mandatory = $true)][string]$LeaderID)
+    return Select-NodeExcept -Excluded @($LeaderID)
+}
+
+function Wait-ControlNodeStopped {
+    param([Parameter(Mandatory = $true)]$Node)
+    $deadline = (Get-Date).AddSeconds(30)
+    while ((Get-Date) -lt $deadline) {
+        $running = & docker inspect -f "{{.State.Running}}" $Node.Name 2>$null
+        if ($LASTEXITCODE -eq 0 -and (($running | Out-String).Trim()) -eq "false") {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for control-plane container $($Node.Name) to stop"
+}
+
+function Wait-RaftQuorumAfterNodeStop {
+    param([Parameter(Mandatory = $true)]$StoppedNode)
+    $aliveNodes = @($nodes | Where-Object { $_.ID -ne $StoppedNode.ID })
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        foreach ($node in $aliveNodes) {
+            try {
+                $status = Get-RaftStatus -Node $node
+                $leaderID = Get-RaftLeaderID -Status $status
+                if ([bool](Get-JSONProperty -Object $status -Name "ready" -Default $false) -and $leaderID -ne "") {
+                    $leader = $aliveNodes | Where-Object { $_.ID -eq $leaderID } | Select-Object -First 1
+                    if ($null -ne $leader) {
+                        return $leader
+                    }
+                    return $node
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for Raft quorum after stopping $($StoppedNode.ID)"
+}
 function Expected-WorkloadNode {
     param([Parameter(Mandatory = $true)][string]$WorkloadName)
     $nodesByWorkload = $scenarioCfg.WorkloadNodes
@@ -313,6 +393,58 @@ function Wait-AssignmentsRunning {
     throw "Timed out waiting for $($scenarioCfg.Slug) assignments to reach expected nodes"
 }
 
+function Wait-AssignmentRunningOn {
+    param(
+        [Parameter(Mandatory = $true)]$LeaderNode,
+        [Parameter(Mandatory = $true)][string]$WorkloadName,
+        [Parameter(Mandatory = $true)][string]$ExpectedNodeID
+    )
+    $leaderURL = Node-URL $LeaderNode
+    $key = "$namespace/$appName/$WorkloadName"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $assignments = Invoke-CLIJson -ServerURL $leaderURL -Arguments @("get", "assignments", "--json")
+        $found = $assignments | Where-Object {
+            $_.key -eq $key -and $_.node -eq $ExpectedNodeID -and $_.status -eq "running"
+        } | Select-Object -First 1
+        if ($null -ne $found) {
+            $address = [string](Get-JSONProperty -Object $found -Name "address" -Default "")
+            if ($address -ne "") {
+                return
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for $key to run on $ExpectedNodeID"
+}
+
+function Wait-WhoamiIngress {
+    param([Parameter(Mandatory = $true)]$IngressNode)
+    $url = "http://127.0.0.1:$($IngressNode.IngressHostPort)/"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $resp = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 5
+            $body = [string]$resp.Content
+            if ($resp.StatusCode -eq 200 -and $body.Contains("Hostname:")) {
+                Write-Host "Whoami response from $url"
+                Write-Host $body
+                return
+            }
+        }
+        catch {
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for whoami response through ingress $url"
+}
+
+function Wait-PlacementIngress {
+    param($IngressNodes = $nodes)
+    foreach ($node in @($IngressNodes)) {
+        Wait-WhoamiIngress -IngressNode $node
+    }
+}
 function Wait-NextcloudIngress {
     param([Parameter(Mandatory = $true)]$IngressNode)
     $url = "http://127.0.0.1:$($IngressNode.IngressHostPort)/"
@@ -366,6 +498,7 @@ function Wait-SeaweedRoundTrip {
 
 function Wait-ScenarioIngress {
     switch ($scenarioCfg.Slug) {
+        "placement" { Wait-PlacementIngress }
         "nextcloud" {
             foreach ($node in $nodes) {
                 Wait-NextcloudIngress -IngressNode $node
@@ -376,6 +509,55 @@ function Wait-ScenarioIngress {
     }
 }
 
+function Invoke-PlacementOperations {
+    param([Parameter(Mandatory = $true)]$LeaderNode)
+    if ($scenarioCfg.Slug -ne "placement") {
+        return
+    }
+
+    $workloadName = "whoami"
+    $preferredNodeID = "node-b"
+    $leaderURL = Node-URL $LeaderNode
+    $migrateTarget = Select-NodeExcept -Excluded @($preferredNodeID)
+
+    Write-Host ""
+    Write-Host "Migrating $workloadName to $($migrateTarget.ID)..."
+    Invoke-Checked $cliBin @("--server", $leaderURL, "migrate", "app", $appName, "--to", $migrateTarget.ID, "--workload", $workloadName, "-n", $namespace)
+    Wait-AssignmentRunningOn -LeaderNode $LeaderNode -WorkloadName $workloadName -ExpectedNodeID $migrateTarget.ID
+    Wait-PlacementIngress
+
+    Write-Host ""
+    Write-Host "Rebalancing $workloadName back to preferred node $preferredNodeID..."
+    Invoke-Checked $cliBin @("--server", $leaderURL, "rebalance", "app", $appName, "--workload", $workloadName, "-n", $namespace)
+    Wait-AssignmentRunningOn -LeaderNode $LeaderNode -WorkloadName $workloadName -ExpectedNodeID $preferredNodeID
+    Wait-PlacementIngress
+
+    $currentLeader = Find-LeaderNode
+    $victim = Select-NonLeaderNode -LeaderID ([string]$currentLeader.ID)
+    if ($victim.ID -ne $preferredNodeID) {
+        $leaderURL = Node-URL $currentLeader
+        Write-Host ""
+        Write-Host "Migrating $workloadName to non-leader victim $($victim.ID) before failure simulation..."
+        Invoke-Checked $cliBin @("--server", $leaderURL, "migrate", "app", $appName, "--to", $victim.ID, "--workload", $workloadName, "-n", $namespace)
+        Wait-AssignmentRunningOn -LeaderNode $currentLeader -WorkloadName $workloadName -ExpectedNodeID $victim.ID
+        Wait-PlacementIngress
+    }
+
+    Write-Host ""
+    Write-Host "Stopping control-plane node $($victim.ID) to simulate node failure..."
+    Invoke-Docker @("stop", $victim.Name)
+    Wait-ControlNodeStopped -Node $victim
+    $leaderAfterStop = Wait-RaftQuorumAfterNodeStop -StoppedNode $victim
+    $survivor = $leaderAfterStop
+    $survivorURL = Node-URL $survivor
+
+    Write-Host "Raft leader after node stop: $($leaderAfterStop.ID)"
+    Write-Host "Failing over $workloadName from $($victim.ID) to $($survivor.ID)..."
+    Invoke-Checked $cliBin @("--server", $survivorURL, "failover", "app", $appName, "--to", $survivor.ID, "--workload", $workloadName, "-n", $namespace)
+    Wait-AssignmentRunningOn -LeaderNode $survivor -WorkloadName $workloadName -ExpectedNodeID $survivor.ID
+    $aliveNodes = @($nodes | Where-Object { $_.ID -ne $victim.ID })
+    Wait-PlacementIngress -IngressNodes $aliveNodes
+}
 function Wait-AppDeleted {
     param([Parameter(Mandatory = $true)]$LeaderNode)
     $leaderURL = Node-URL $LeaderNode
@@ -568,6 +750,7 @@ try {
     Invoke-Checked $cliBin @("--server", $leaderURL, "apply", "--file", $manifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
     Wait-AssignmentsRunning -LeaderNode $leader
     Wait-ScenarioIngress
+    Invoke-PlacementOperations -LeaderNode $leader
 
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "apps")
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "assignments")

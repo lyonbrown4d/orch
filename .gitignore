@@ -96,3 +96,4 @@ data
 .orch-docker-raft-seaweed/
 .orch-docker-raft-kafka/
 .orch-docker-raft-postgres-ha/
+.orch-docker-raft-placement/

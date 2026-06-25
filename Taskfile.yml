@@ -113,6 +113,12 @@ tasks:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
 
 
+  smoke:docker-raft-placement:
+    desc: "Run a Docker 3-node Raft cluster smoke for migrate, rebalance, and failover"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
   smoke:docker-raft-nextcloud:
     desc: "Run a Docker 3-node Raft cluster smoke with Nextcloud, Postgres, and Redis"
     cmds:

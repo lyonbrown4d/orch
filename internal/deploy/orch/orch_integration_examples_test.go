@@ -2,6 +2,13 @@ package orch_test
 
 import "testing"
 
+func TestIntegrationPlacementExample(t *testing.T) {
+	app := loadAppFile(t, "../../../examples/integration/placement.orch")
+	requireMetadata(t, app, "placement-smoke", "default")
+	requireWorkloadCount(t, app, 1)
+	requireIngressRoute(t, app, 0, "/", "whoami", "http")
+	requireValidApp(t, app)
+}
 func TestIntegrationNextcloudExample(t *testing.T) {
 	app := loadAppFile(t, "../../../examples/integration/nextcloud.orch")
 	requireMetadata(t, app, "nextcloud-smoke", "default")

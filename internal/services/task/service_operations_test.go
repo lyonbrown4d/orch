@@ -2,10 +2,13 @@ package task_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/lyonbrown4d/orch/internal/config"
+	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
+	orchruntime "github.com/lyonbrown4d/orch/internal/runtime"
 	"github.com/lyonbrown4d/orch/internal/services/task"
 	"github.com/lyonbrown4d/orch/internal/workerapi"
 	"github.com/lyonbrown4d/orch/internal/workloadmeta"
@@ -66,6 +69,47 @@ func TestSubmitRebalanceStartsUnassignedWorkloadWithoutStop(t *testing.T) {
 	harness.requireAssignment(t, app, "worker", "node-a", workloadmeta.AssignmentStatusRunning)
 }
 
+func TestSubmitFailoverContinuesWhenSourceStopFails(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := &failoverStopFailDispatcher{deployCh: make(chan workerapi.DeployWorkloadBody, 1)}
+	harness := newTaskHarness(t, config.Default(), dispatcher)
+	app := deployApp("failover-stop-fails", dockerWorkload("worker", "busybox"))
+	harness.applyApp(t, app)
+	harness.applyWorkerAssignment(t, app, "node-b", workloadmeta.AssignmentStatusRunning)
+
+	summary, err := harness.svc.SubmitFailover(context.Background(), app.Metadata, task.AppOperationOptions{
+		TargetNode: "node-c",
+		Workloads:  []string{"worker"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireMoveSummary(t, summary, 1, "node-c")
+	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatcher.deployCh, 3*time.Second), "node-c", "worker")
+	harness.requireAssignment(t, app, "worker", "node-c", workloadmeta.AssignmentStatusRunning)
+}
+
+type failoverStopFailDispatcher struct {
+	deployCh chan workerapi.DeployWorkloadBody
+}
+
+func (d *failoverStopFailDispatcher) DispatchWorkload(_ context.Context, nodeID string, meta deployv1.Metadata, workload deployv1.Workload) (task.DispatchResult, error) {
+	d.deployCh <- workerapi.DeployWorkloadBody{Metadata: meta, Workload: workload, Node: nodeID}
+	return task.DispatchResult{Accepted: true, Node: nodeID, Status: workloadmeta.AssignmentStatusRunning, Workload: workload.Name}, nil
+}
+
+func (d *failoverStopFailDispatcher) StopWorkload(context.Context, string, deployv1.Metadata, deployv1.Workload) (task.DispatchResult, error) {
+	return task.DispatchResult{}, errors.New("worker unavailable")
+}
+
+func (d *failoverStopFailDispatcher) WorkloadStatus(context.Context, string, deployv1.Metadata, deployv1.Workload) (orchruntime.Status, error) {
+	return orchruntime.Status{}, errors.New("not implemented")
+}
+
+func (d *failoverStopFailDispatcher) WorkloadLogs(context.Context, string, deployv1.Metadata, deployv1.Workload, orchruntime.LogOptions) (orchruntime.LogResult, error) {
+	return orchruntime.LogResult{}, errors.New("not implemented")
+}
 func requireMoveSummary(t *testing.T, summary task.AppOperationSummary, moved int, targetNode string) {
 	t.Helper()
 	if summary.Moved != moved {

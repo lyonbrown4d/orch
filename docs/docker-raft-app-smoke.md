@@ -18,6 +18,34 @@ adding Docker-in-Docker startup cost. A future DinD variant can reuse the same
 
 ## Scenarios
 
+### Placement / Failover
+
+```powershell
+task smoke:docker-raft-placement
+```
+
+Deploy file:
+
+```text
+examples/integration/placement.orch
+```
+
+Deploys `traefik/whoami:v1.11` as a lightweight HTTP service pinned to
+`node-b`. After the initial deploy succeeds, the smoke exercises the user-facing
+operation chain:
+
+- `migrate app placement-smoke --to <node> --workload whoami`
+- `rebalance app placement-smoke --workload whoami`
+- stop one non-leader orch-server container to simulate a worker/control-plane
+  node outage
+- `failover app placement-smoke --to <survivor> --workload whoami`
+
+Each step waits for the assignment to become `running` on the expected node and
+then checks whoami through the live ingress ports. In the current local Docker
+setup all orch-server containers share the host Docker socket, so the node outage
+models worker API/control-plane unavailability rather than a separate Docker
+host losing power.
+
 ### Nextcloud
 
 ```powershell
@@ -68,6 +96,7 @@ workload DNS records, and cross-node ingress forwarding.
 ## Direct Commands
 
 ```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed
 ```
@@ -84,6 +113,8 @@ These tests validate deployment and connectivity. They do not yet validate
 persistent data recovery because the Docker provider has not wired deploy
 `mounts` and `volumes` into Docker HostConfig mounts.
 
+Placement is intentionally lightweight and focuses on control-plane operations:
+migrate, rebalance, and failover after a simulated non-leader node outage.
 Nextcloud is intentionally pinned to one node so the smoke focuses on a common
 single-owner web application shape. SeaweedFS is spread across all three orch
 nodes and relies on replicated workload assignment addresses to let a single orch

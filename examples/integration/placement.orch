@@ -1,0 +1,24 @@
+// Integration smoke: lightweight workload placement, migration, rebalance, and failover.
+// The smoke script starts a 3-node orch cluster and deploys this file via orch-cli.
+
+app {
+  name = "placement-smoke"
+  namespace = "default"
+
+  docker {
+    network = "orch-raft-placement-smoke"
+  }
+
+  service whoami {
+    image = "traefik/whoami:v1.11"
+    preferred_nodes = ["node-b"]
+
+    http(80)
+  }
+
+  ingress public {
+    path "/" {
+      workload = whoami
+    }
+  }
+}

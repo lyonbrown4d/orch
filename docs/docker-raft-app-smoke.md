@@ -109,9 +109,9 @@ Use `-KeepCluster -KeepWorkload` to inspect a successful run before cleanup.
 
 ## Current Boundaries
 
-These tests validate deployment and connectivity. They do not yet validate
-persistent data recovery because the Docker provider has not wired deploy
-`mounts` and `volumes` into Docker HostConfig mounts.
+These tests validate deployment and connectivity. Docker runtime `mounts` now map
+to local Docker named volumes, but these smoke scenarios still do not validate
+cross-node shared storage, attach/detach orchestration, or data migration.
 
 Placement is intentionally lightweight and focuses on control-plane operations:
 migrate, rebalance, and failover after a simulated non-leader node outage.

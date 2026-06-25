@@ -77,6 +77,10 @@ func (a *App) validateWorkloadMounts() error {
 				validateErr = oopsx.B("deploy").Errorf("workloads[%d].mounts[%d].volume: name is required", i, j)
 				return false
 			}
+			if strings.TrimSpace(mount.Target) == "" {
+				validateErr = oopsx.B("deploy").Errorf("workloads[%d].mounts[%d].target: target is required", i, j)
+				return false
+			}
 			return true
 		})
 		return validateErr == nil

@@ -165,3 +165,20 @@ func TestFirecrackerArtifactSummaryFallsBackToRootfs(t *testing.T) {
 		t.Fatalf("summary = %q", got)
 	}
 }
+
+func TestBuildConfigRejectsMounts(t *testing.T) {
+	t.Parallel()
+
+	provider := firecracker.NewProviderWithRoot(nil, nil, t.TempDir())
+	_, err := provider.BuildConfig(deployv1.Metadata{Name: "demo", Namespace: "prod"}, deployv1.Workload{
+		Name: "vm",
+		Run: deployv1.RunSpec{Options: deployv1.RunOptions{Firecracker: &deployv1.FirecrackerOptions{
+			KernelImagePath: "/var/lib/orch/vmlinux",
+			RootfsPath:      "/var/lib/orch/rootfs.ext4",
+		}}},
+		Mounts: []deployv1.Mount{{Volume: deployv1.VolumeRef{Name: "data"}, Target: "/data"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not support workload mounts") {
+		t.Fatalf("err = %v", err)
+	}
+}

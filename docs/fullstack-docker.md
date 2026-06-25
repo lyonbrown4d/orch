@@ -104,12 +104,25 @@ app {
     network = "orch-demo"
   }
 
+  volume postgresData {
+    persistent = true
+  }
+
+  volume redisData {
+    persistent = true
+  }
+
   stateful postgres {
     image = "postgres:16-alpine"
     env = {
       POSTGRES_DB = "app",
       POSTGRES_USER = "orch",
       POSTGRES_PASSWORD = "orch-dev-password",
+    }
+
+    mount {
+      volume = "postgresData"
+      target = "/var/lib/postgresql/data"
     }
 
     tcp(5432)
@@ -177,8 +190,9 @@ application-first:
 The manifest intentionally stays inside the current runtime surface:
 
 - Supported by the `docker` provider now: image pull, command, args, env, cwd,
-  resource limits, Docker network mode, labels, `privileged`, and Docker-native
-  DNS nameserver/search injection.
+  resource limits, Docker network mode, labels, `privileged`, Docker-native DNS
+  nameserver/search injection, and workload `mounts` backed by local Docker
+  named volumes.
 - Workload DNS is platform-managed. Configure `dns.workload.upstream` when
   workloads also need non-orch DNS names, instead of adding per-workload
   resolver settings.
@@ -186,9 +200,9 @@ The manifest intentionally stays inside the current runtime surface:
   readiness gate.
 - Workload `endpoint` entries feed DNS/ingress intent; they do not publish host
   ports directly.
-- The deploy model has volumes/mounts, but the current `docker` provider does
-  not mount them yet. Treat `postgres` and `redis` in this example as topology
-  examples until volume mounting is wired.
+- Workload `mounts` are local runtime mounts. They persist on the node/Docker
+  daemon that runs the workload, but orch does not yet provide cross-node shared
+  volumes, attach/detach orchestration, or data migration.
 - The verbose `workload { run { ... } endpoint { ... } }` form still works as
   an escape hatch when the short form is not expressive enough.
 

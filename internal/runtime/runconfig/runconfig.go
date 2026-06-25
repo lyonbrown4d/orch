@@ -1,19 +1,34 @@
 package runconfig
 
 import (
+	"fmt"
 	"math"
+	"os"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/arcgolabs/collectionx/list"
 	"github.com/samber/lo"
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
+	"github.com/lyonbrown4d/orch/internal/workloadmeta"
+	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
 
 const (
 	nanoCPUsPerMilli = int64(1_000_000)
 	cfsPeriodMicros  = uint64(100_000)
 )
+
+// Mount is a runtime-ready view of a workload mount.
+type Mount struct {
+	Volume     string
+	VolumeName string
+	SourcePath string
+	Target     string
+	ReadOnly   bool
+}
 
 // Env returns Docker/OCI-style environment entries.
 func Env(vars *list.List[deployv1.EnvVar]) *list.List[string] {
@@ -91,4 +106,106 @@ func CFSQuota(cpuMillis int64) (quota int64, period uint64) {
 		quota = 1
 	}
 	return quota, cfsPeriodMicros
+}
+
+// LocalMounts converts deploy mounts into local runtime mount descriptors.
+func LocalMounts(root string, meta deployv1.Metadata, workload deployv1.Workload) (*list.List[Mount], error) {
+	mounts := list.NewListWithCapacity[Mount](len(workload.Mounts))
+	var convertErr error
+	workload.MountList().Range(func(i int, mount deployv1.Mount) bool {
+		converted, err := LocalMount(root, meta, mount)
+		if err != nil {
+			convertErr = oopsx.B("runtime", "mount").Wrapf(err, "workload %s mounts[%d]", workload.Name, i)
+			return false
+		}
+		mounts.Add(converted)
+		return true
+	})
+	if convertErr != nil {
+		return nil, convertErr
+	}
+	return mounts, nil
+}
+
+// LocalMount converts one deploy mount into a runtime-ready local mount.
+func LocalMount(root string, meta deployv1.Metadata, mount deployv1.Mount) (Mount, error) {
+	volume := strings.TrimSpace(mount.Volume.Name)
+	if volume == "" {
+		return Mount{}, oopsx.B("runtime", "mount").Errorf("volume name is required")
+	}
+	target, err := cleanMountTarget(mount.Target)
+	if err != nil {
+		return Mount{}, err
+	}
+	out := Mount{
+		Volume:     volume,
+		VolumeName: VolumeName(meta, volume),
+		Target:     target,
+		ReadOnly:   mount.ReadOnly,
+	}
+	if strings.TrimSpace(root) != "" {
+		out.SourcePath = LocalVolumePath(root, meta, volume)
+	}
+	return out, nil
+}
+
+// VolumeName returns a stable runtime-local volume name.
+func VolumeName(meta deployv1.Metadata, volumeName string) string {
+	ns := workloadmeta.SanitizeName(workloadmeta.NamespaceOrDefault(meta.Namespace))
+	app := workloadmeta.SanitizeName(meta.Name)
+	volume := workloadmeta.SanitizeName(volumeName)
+	return fmt.Sprintf("orch-%s-%s-%s", ns, app, volume)
+}
+
+// LocalVolumePath returns the host path backing a local runtime volume.
+func LocalVolumePath(root string, meta deployv1.Metadata, volumeName string) string {
+	return filepath.Join(
+		filepath.Clean(root),
+		"volumes",
+		workloadmeta.SanitizeName(workloadmeta.NamespaceOrDefault(meta.Namespace)),
+		workloadmeta.SanitizeName(meta.Name),
+		workloadmeta.SanitizeName(volumeName),
+	)
+}
+
+// EnsureLocalMountSources creates host directories for mounts with SourcePath set.
+func EnsureLocalMountSources(mounts *list.List[Mount]) error {
+	if mounts == nil {
+		return nil
+	}
+	var ensureErr error
+	mounts.Range(func(_ int, mount Mount) bool {
+		if strings.TrimSpace(mount.SourcePath) == "" {
+			return true
+		}
+		if err := os.MkdirAll(mount.SourcePath, 0o755); err != nil {
+			ensureErr = oopsx.B("runtime", "mount").Wrapf(err, "create volume source %s", mount.SourcePath)
+			return false
+		}
+		return true
+	})
+	return ensureErr
+}
+
+// RejectUnsupportedMounts returns an explicit error for runtimes that cannot
+// currently materialize workload mounts.
+func RejectUnsupportedMounts(runtime deployv1.RuntimeKind, workload deployv1.Workload) error {
+	if len(workload.Mounts) == 0 {
+		return nil
+	}
+	return oopsx.B("runtime", "mount").Errorf("runtime %s does not support workload mounts yet", runtime)
+}
+
+func cleanMountTarget(target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", oopsx.B("runtime", "mount").Errorf("target is required")
+	}
+	if strings.HasPrefix(target, "/") {
+		return path.Clean(target), nil
+	}
+	if filepath.IsAbs(target) {
+		return filepath.Clean(target), nil
+	}
+	return "", oopsx.B("runtime", "mount").Errorf("target must be absolute: %q", target)
 }

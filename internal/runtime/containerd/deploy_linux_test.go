@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -92,7 +93,8 @@ func TestCRIDNSConfig(t *testing.T) {
 func TestCRIContainerConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := criContainerConfig("busybox:latest", deployv1.Metadata{Name: "demo", Namespace: "default"}, deployv1.Workload{
+	provider := &Provider{root: t.TempDir()}
+	cfg, err := criContainerConfig(provider, "busybox:latest", deployv1.Metadata{Name: "demo", Namespace: "default"}, deployv1.Workload{
 		Name:    "api",
 		Runtime: deployv1.RuntimeContainerd,
 		Run: deployv1.RunSpec{
@@ -104,6 +106,9 @@ func TestCRIContainerConfig(t *testing.T) {
 		},
 		Resources: &deployv1.Resources{CPUMillis: 500, MemoryBytes: 128 << 20},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if cfg.Image.GetImage() != "busybox:latest" {
 		t.Fatalf("image = %q", cfg.Image.GetImage())
@@ -123,6 +128,31 @@ func TestCRIContainerConfig(t *testing.T) {
 	}
 	if res.GetCpuQuota() == 0 || res.GetCpuPeriod() == 0 {
 		t.Fatalf("cpu quota/period = %d/%d", res.GetCpuQuota(), res.GetCpuPeriod())
+	}
+}
+
+func TestCRIContainerConfigMounts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	cfg, err := criContainerConfig(&Provider{root: root}, "busybox:latest", deployv1.Metadata{Name: "demo", Namespace: "prod"}, deployv1.Workload{
+		Name:    "api",
+		Runtime: deployv1.RuntimeContainerd,
+		Mounts:  []deployv1.Mount{{Volume: deployv1.VolumeRef{Name: "data"}, Target: "/data", ReadOnly: true}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Mounts) != 1 {
+		t.Fatalf("mounts = %#v", cfg.Mounts)
+	}
+	got := cfg.Mounts[0]
+	wantHost := filepath.Join(root, "volumes", "prod", "demo", "data")
+	if got.HostPath != wantHost || got.ContainerPath != "/data" || !got.Readonly {
+		t.Fatalf("mount = %#v", got)
+	}
+	if _, err := os.Stat(wantHost); err != nil {
+		t.Fatalf("host path stat: %v", err)
 	}
 }
 

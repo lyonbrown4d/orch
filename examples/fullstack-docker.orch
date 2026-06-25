@@ -21,12 +21,25 @@ app {
     network = "orch-demo"
   }
 
+  volume postgresData {
+    persistent = true
+  }
+
+  volume redisData {
+    persistent = true
+  }
+
   stateful postgres {
     image = "postgres:16-alpine"
     env = {
       POSTGRES_DB = "app",
       POSTGRES_USER = "orch",
       POSTGRES_PASSWORD = "orch-dev-password",
+    }
+
+    mount {
+      volume = "postgresData"
+      target = "/var/lib/postgresql/data"
     }
 
     tcp(5432)
@@ -37,6 +50,11 @@ app {
     image = "redis:7-alpine"
     command = ["redis-server"]
     args = ["--appendonly", "yes"]
+
+    mount {
+      volume = "redisData"
+      target = "/data"
+    }
 
     tcp(6379)
     resources = "250m/256Mi"

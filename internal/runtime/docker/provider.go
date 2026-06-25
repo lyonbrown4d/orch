@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/arcgolabs/collectionx/list"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	dockermount "github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
@@ -147,6 +149,11 @@ func (p *Provider) deployWorkloadContainer(ctx context.Context, cli *client.Clie
 		hostCfg.Privileged = w.Run.Options.Docker.Privileged
 	}
 	ApplyWorkloadDNS(hostCfg, p.dns, meta.Namespace)
+	localMounts, err := runconfig.LocalMounts("", meta, w)
+	if err != nil {
+		return err
+	}
+	ApplyLocalMounts(hostCfg, localMounts)
 
 	containerID, err := p.createDockerContainer(ctx, cli, meta, w, name, ctrCfg, hostCfg)
 	if err != nil {
@@ -156,6 +163,22 @@ func (p *Provider) deployWorkloadContainer(ctx context.Context, cli *client.Clie
 		return nil
 	}
 	return p.dockerRunAfterCreate(ctx, cli, meta, w, name, containerID)
+}
+
+// ApplyLocalMounts injects local runtime volumes into Docker-compatible host config.
+func ApplyLocalMounts(hostCfg *container.HostConfig, mounts *list.List[runconfig.Mount]) {
+	if hostCfg == nil || mounts == nil {
+		return
+	}
+	mounts.Range(func(_ int, m runconfig.Mount) bool {
+		hostCfg.Mounts = append(hostCfg.Mounts, dockermount.Mount{
+			Type:     dockermount.TypeVolume,
+			Source:   m.VolumeName,
+			Target:   m.Target,
+			ReadOnly: m.ReadOnly,
+		})
+		return true
+	})
 }
 
 func (p *Provider) createDockerContainer(

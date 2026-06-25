@@ -10,6 +10,9 @@ func TestOrchLoadFullstackDockerExample(t *testing.T) {
 	app := loadAppFile(t, "../../../examples/fullstack-docker.orch")
 	requireMetadata(t, app, "fullstack", "demo")
 	requireWorkloadCount(t, app, 4)
+	if len(app.Volumes) != 2 {
+		t.Fatalf("volumes = %+v", app.Volumes)
+	}
 	requireFullstackPostgres(t, workloadByName(t, app, "postgres"))
 	requireFullstackBackend(t, workloadByName(t, app, "backend"))
 	requireIngressRoute(t, app, 0, "/api", "backend", "http")
@@ -24,6 +27,7 @@ func requireFullstackPostgres(t *testing.T, postgres v1.Workload) {
 	requireDockerNetwork(t, postgres, "orch-demo")
 	requireEndpoint(t, postgres, "tcp-5432", 5432, v1.ProtoTCP)
 	requireResources(t, postgres, 500, 536870912)
+	requireMount(t, postgres, "postgresData", "/var/lib/postgresql/data")
 }
 
 func requireFullstackBackend(t *testing.T, backend v1.Workload) {

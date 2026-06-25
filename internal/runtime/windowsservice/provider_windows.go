@@ -33,6 +33,9 @@ func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv
 	if err := ctx.Err(); err != nil {
 		return oopsx.B("runtime", "windows-service").Wrapf(err, "deploy context")
 	}
+	if err := runconfig.RejectUnsupportedMounts(deployv1.RuntimeWindowsService, w); err != nil {
+		return err
+	}
 	spec, err := p.deployServiceSpec(meta, w)
 	if err != nil {
 		return err

@@ -8,6 +8,7 @@ import (
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	runtimedocker "github.com/lyonbrown4d/orch/internal/runtime/docker"
+	"github.com/lyonbrown4d/orch/internal/runtime/runconfig"
 )
 
 func TestContainerLabelsMergesDockerLabels(t *testing.T) {
@@ -85,5 +86,22 @@ func TestApplyWorkloadDNS(t *testing.T) {
 		if hostCfg.DNSSearch[i] != wantSearch[i] {
 			t.Fatalf("DNSSearch = %#v", hostCfg.DNSSearch)
 		}
+	}
+}
+
+func TestApplyLocalMounts(t *testing.T) {
+	hostCfg := &container.HostConfig{}
+	runtimedocker.ApplyLocalMounts(hostCfg, list.NewList(runconfig.Mount{
+		VolumeName: "orch-demo-app-data",
+		Target:     "/var/lib/app",
+		ReadOnly:   true,
+	}))
+
+	if len(hostCfg.Mounts) != 1 {
+		t.Fatalf("mounts = %#v", hostCfg.Mounts)
+	}
+	got := hostCfg.Mounts[0]
+	if string(got.Type) != "volume" || got.Source != "orch-demo-app-data" || got.Target != "/var/lib/app" || !got.ReadOnly {
+		t.Fatalf("mount = %#v", got)
 	}
 }

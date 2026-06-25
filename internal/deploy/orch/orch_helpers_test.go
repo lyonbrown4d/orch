@@ -154,3 +154,13 @@ func requireIngressRoute(t *testing.T, app *v1.App, idx int, path, workload, end
 		t.Fatalf("route = %+v", route)
 	}
 }
+
+func requireMount(t *testing.T, workload v1.Workload, volume, target string) {
+	t.Helper()
+	for _, mount := range workload.Mounts {
+		if mount.Volume.Name == volume && mount.Target == target {
+			return
+		}
+	}
+	t.Fatalf("%s mounts = %+v, want %s -> %s", workload.Name, workload.Mounts, volume, target)
+}

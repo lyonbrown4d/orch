@@ -17,8 +17,11 @@ import (
 func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv1.Workload) error {
 	unitName := p.workloadUnitName(meta, w)
 	unitPath := systemdUnitPath(unitName)
-	content, err := RenderUnit(meta, w, unitName)
+	content, err := RenderUnitWithRoot(meta, w, unitName, p.rootOrDefault())
 	if err != nil {
+		return err
+	}
+	if err := p.ensureMountSources(meta, w); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(unitPath), 0o755); err != nil {
@@ -71,6 +74,13 @@ func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv
 	return nil
 }
 
+func (p *Provider) ensureMountSources(meta deployv1.Metadata, w deployv1.Workload) error {
+	mounts, err := runconfig.LocalMounts(p.rootOrDefault(), meta, w)
+	if err != nil {
+		return err
+	}
+	return runconfig.EnsureLocalMountSources(mounts)
+}
 func (p *Provider) connect(ctx context.Context) (Connection, error) {
 	if p.connector == nil {
 		p.connector = NewConnector()

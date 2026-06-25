@@ -187,7 +187,35 @@ func criLinuxResources(w deployv1.Workload) *runtimeapi.LinuxContainerResources 
 	return res
 }
 
-func criContainerConfig(ref string, meta deployv1.Metadata, w deployv1.Workload) *runtimeapi.ContainerConfig {
+func criContainerMounts(p *Provider, meta deployv1.Metadata, w deployv1.Workload) ([]*runtimeapi.Mount, error) {
+	mounts, err := runconfig.LocalMounts(criMountRoot(p), meta, w)
+	if err != nil {
+		return nil, err
+	}
+	if err := runconfig.EnsureLocalMountSources(mounts); err != nil {
+		return nil, err
+	}
+	return list.MapList(mounts, func(_ int, mount runconfig.Mount) *runtimeapi.Mount {
+		return &runtimeapi.Mount{
+			ContainerPath: mount.Target,
+			HostPath:      mount.SourcePath,
+			Readonly:      mount.ReadOnly,
+		}
+	}).Values(), nil
+}
+
+func criMountRoot(p *Provider) string {
+	if p == nil {
+		return filepath.Join(config.DefaultDataRoot(), "runtime", "containerd")
+	}
+	return p.rootOrDefault()
+}
+
+func criContainerConfig(p *Provider, ref string, meta deployv1.Metadata, w deployv1.Workload) (*runtimeapi.ContainerConfig, error) {
+	mounts, err := criContainerMounts(p, meta, w)
+	if err != nil {
+		return nil, err
+	}
 	cfg := &runtimeapi.ContainerConfig{
 		Metadata: &runtimeapi.ContainerMetadata{
 			Name:    workloadmeta.SanitizeName(w.Name),
@@ -200,11 +228,12 @@ func criContainerConfig(ref string, meta deployv1.Metadata, w deployv1.Workload)
 		Envs:       criEnv(w.EnvList()),
 		Labels:     criWorkloadLabels(meta, w),
 		LogPath:    workloadmeta.SanitizeName(w.Name) + ".log",
+		Mounts:     mounts,
 	}
 	if res := criLinuxResources(w); res != nil {
 		cfg.Linux = &runtimeapi.LinuxContainerConfig{Resources: res}
 	}
-	return cfg
+	return cfg, nil
 }
 
 func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv1.Workload) error {
@@ -240,7 +269,12 @@ func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv
 	}
 	sandboxID := sandbox.GetPodSandboxId()
 
-	containerCfg := criContainerConfig(ref, meta, w)
+	containerCfg, err := criContainerConfig(p, ref, meta, w)
+	if err != nil {
+		cleanupCRIWorkload(ctx, clients.runtime, "", sandboxID)
+		return oopsx.B("runtime", "containerd").Wrapf(err, "containerd CRI container config")
+	}
+
 	created, err := clients.runtime.CreateContainer(ctx, &runtimeapi.CreateContainerRequest{
 		PodSandboxId:  sandboxID,
 		Config:        containerCfg,

@@ -100,6 +100,9 @@ func (p *Provider) Logs(_ context.Context, meta deployv1.Metadata, workloadName 
 
 // BuildConfig converts an orch workload into a Firecracker VM configuration.
 func (p *Provider) BuildConfig(meta deployv1.Metadata, w deployv1.Workload) (VMConfig, error) {
+	if err := runconfig.RejectUnsupportedMounts(deployv1.RuntimeFirecracker, w); err != nil {
+		return VMConfig{}, err
+	}
 	if w.Run.Options.Firecracker == nil {
 		return VMConfig{}, oopsx.B("runtime", "firecracker").Errorf("workload %q: run.runtimeOptions.firecracker is required", w.Name)
 	}

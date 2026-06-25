@@ -1,6 +1,8 @@
 package systemd_test
 
 import (
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -65,6 +67,27 @@ func TestRenderUnit(t *testing.T) {
 		if !strings.Contains(unit, want) {
 			t.Fatalf("unit missing %q\n%s", want, unit)
 		}
+	}
+}
+
+func TestRenderUnitWithMounts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	unit, err := systemd.RenderUnitWithRoot(deployv1.Metadata{Name: "demo", Namespace: "prod"}, deployv1.Workload{
+		Name: "api",
+		Kind: deployv1.WorkloadKindService,
+		Run:  deployv1.RunSpec{Exec: deployv1.ExecSpec{Command: []string{"/usr/local/bin/api"}}},
+		Mounts: []deployv1.Mount{
+			{Volume: deployv1.VolumeRef{Name: "data"}, Target: "/var/lib/api", ReadOnly: true},
+		},
+	}, "orch-prod-demo-api.service", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "BindReadOnlyPaths=" + strconv.Quote(filepath.Join(root, "volumes", "prod", "demo", "data")+":/var/lib/api")
+	if !strings.Contains(unit, want) {
+		t.Fatalf("unit missing %q\n%s", want, unit)
 	}
 }
 

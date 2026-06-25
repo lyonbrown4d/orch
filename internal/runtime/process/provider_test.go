@@ -143,3 +143,19 @@ type runtimeLogResult struct {
 	Content string
 	Source  string
 }
+
+func TestProviderRejectsMounts(t *testing.T) {
+	provider := process.NewProviderWithRoot(slog.New(slog.DiscardHandler), nil, t.TempDir())
+	meta := deployv1.Metadata{Name: "demo", Namespace: "default"}
+	workload := deployv1.Workload{
+		Name:    "worker",
+		Runtime: deployv1.RuntimeProcess,
+		Run:     deployv1.RunSpec{Exec: deployv1.ExecSpec{Command: []string{"echo"}}},
+		Mounts:  []deployv1.Mount{{Volume: deployv1.VolumeRef{Name: "data"}, Target: "/data"}},
+	}
+
+	err := provider.Deploy(context.Background(), meta, workload)
+	if err == nil || !strings.Contains(err.Error(), "does not support workload mounts") {
+		t.Fatalf("err = %v", err)
+	}
+}

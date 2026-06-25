@@ -77,6 +77,11 @@ func NormalizeUnitName(name string) string {
 
 // RenderUnit renders a systemd unit for an orch workload.
 func RenderUnit(meta deployv1.Metadata, w deployv1.Workload, unitName string) (string, error) {
+	return RenderUnitWithRoot(meta, w, unitName, filepath.Join(config.DefaultDataRoot(), "runtime", "systemd"))
+}
+
+// RenderUnitWithRoot renders a systemd unit using an explicit runtime root for local volume mounts.
+func RenderUnitWithRoot(meta deployv1.Metadata, w deployv1.Workload, unitName, root string) (string, error) {
 	exe, args, ok := runconfig.ProcessCommand(w.Run)
 	if !ok {
 		return "", oopsx.B("runtime", "systemd").Errorf("workload %q: run.exec.command or run.artifact.path is required", w.Name)
@@ -100,6 +105,9 @@ func RenderUnit(meta deployv1.Metadata, w deployv1.Workload, unitName string) (s
 	if group := systemdGroup(w); group != "" {
 		opts = append(opts, unit.NewUnitOption("Service", "Group", group))
 	}
+	if err := appendSystemdMounts(&opts, root, meta, w); err != nil {
+		return "", err
+	}
 	runconfig.Env(w.EnvList()).Range(func(_ int, env string) bool {
 		opts = append(opts, unit.NewUnitOption("Service", "Environment", systemdQuote(env)))
 		return true
@@ -118,6 +126,22 @@ func RenderUnit(meta deployv1.Metadata, w deployv1.Workload, unitName string) (s
 		return "", oopsx.B("runtime", "systemd").Wrapf(err, "serialize unit %s", unitName)
 	}
 	return string(b), nil
+}
+
+func appendSystemdMounts(opts *[]*unit.UnitOption, root string, meta deployv1.Metadata, w deployv1.Workload) error {
+	mounts, err := runconfig.LocalMounts(root, meta, w)
+	if err != nil {
+		return err
+	}
+	mounts.Range(func(_ int, mount runconfig.Mount) bool {
+		directive := "BindPaths"
+		if mount.ReadOnly {
+			directive = "BindReadOnlyPaths"
+		}
+		*opts = append(*opts, unit.NewUnitOption("Service", directive, systemdQuote(mount.SourcePath+":"+mount.Target)))
+		return true
+	})
+	return nil
 }
 
 func systemdUser(w deployv1.Workload) string {

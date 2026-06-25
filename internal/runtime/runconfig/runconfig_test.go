@@ -2,7 +2,10 @@ package runconfig_test
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/arcgolabs/collectionx/list"
@@ -84,5 +87,62 @@ func TestCFSQuota(t *testing.T) {
 	quota, period := runconfig.CFSQuota(250)
 	if quota != 25_000 || period != 100_000 {
 		t.Fatalf("CFSQuota(250) = (%d, %d), want (25000, 100000)", quota, period)
+	}
+}
+
+func TestLocalMounts(t *testing.T) {
+	root := t.TempDir()
+	meta := deployv1.Metadata{Name: "Demo_App", Namespace: "Prod"}
+	workload := deployv1.Workload{
+		Name: "api",
+		Mounts: []deployv1.Mount{
+			{Volume: deployv1.VolumeRef{Name: "Redis Data"}, Target: " /data ", ReadOnly: true},
+		},
+	}
+
+	got, err := runconfig.LocalMounts(root, meta, workload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Len() != 1 {
+		t.Fatalf("mount count = %d", got.Len())
+	}
+	mount := got.Values()[0]
+	if mount.VolumeName != "orch-prod-demo_app-redis-data" {
+		t.Fatalf("volume name = %q", mount.VolumeName)
+	}
+	if mount.Target != "/data" || !mount.ReadOnly {
+		t.Fatalf("target/readOnly = %q/%v", mount.Target, mount.ReadOnly)
+	}
+	wantSource := filepath.Join(root, "volumes", "prod", "demo_app", "redis-data")
+	if mount.SourcePath != wantSource {
+		t.Fatalf("source = %q, want %q", mount.SourcePath, wantSource)
+	}
+}
+
+func TestLocalMountsRejectsRelativeTarget(t *testing.T) {
+	_, err := runconfig.LocalMounts("", deployv1.Metadata{Name: "demo"}, deployv1.Workload{
+		Name:   "api",
+		Mounts: []deployv1.Mount{{Volume: deployv1.VolumeRef{Name: "data"}, Target: "data"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "target must be absolute") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestEnsureLocalMountSources(t *testing.T) {
+	root := t.TempDir()
+	mounts, err := runconfig.LocalMounts(root, deployv1.Metadata{Name: "demo"}, deployv1.Workload{
+		Name:   "api",
+		Mounts: []deployv1.Mount{{Volume: deployv1.VolumeRef{Name: "data"}, Target: "/data"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runconfig.EnsureLocalMountSources(mounts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(mounts.Values()[0].SourcePath); err != nil {
+		t.Fatalf("source dir stat: %v", err)
 	}
 }

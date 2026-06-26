@@ -93,7 +93,7 @@ ghcr.io/acme/fullstack-frontend:latest
 The example uses the short authoring form. App-level Docker defaults are
 inherited by shorthand workloads, `service` and `stateful` imply workload kind,
 `env = { ... }` replaces repeated env blocks, and `http(...)` / `tcp(...)`
-declare endpoints:
+declare endpoints and readiness probes:
 
 ```plano
 app {
@@ -126,6 +126,15 @@ app {
     }
 
     tcp(5432)
+    health {
+      readiness {
+        tcp = true
+        endpoint = "tcp-5432"
+        interval = "1s"
+        timeout = "500ms"
+        retries = 60
+      }
+    }
     resources = "500m/512Mi"
   }
 
@@ -139,6 +148,15 @@ app {
     }
 
     http(8080)
+    health {
+      readiness {
+        http = "/health"
+        endpoint = "http"
+        interval = "1s"
+        timeout = "500ms"
+        retries = 60
+      }
+    }
     resources = "500m/512Mi"
   }
 }
@@ -153,6 +171,13 @@ service backend {
   depends_on = [postgres, redis]
   env = { HTTP_ADDR = ":8080" }
   http(8080)
+  health {
+    readiness {
+      http = "/health"
+      endpoint = "http"
+      retries = 60
+    }
+  }
   resources = "500m/512Mi"
 }
 ```
@@ -180,10 +205,24 @@ application-first:
 
 - Put cross-workload topology at the workload level with `depends_on`.
 - Put runtime-wide defaults once at the app level, for example `docker.network`.
-- Use compact helpers like `http(8080)`, `tcp(5432)`, `resources = "500m/512Mi"`,
-  and map-style `env = { ... }`.
+- Use compact helpers like `http(8080)`, `tcp(5432)`, `health { readiness { ... } }`,
+  `resources = "500m/512Mi"`, and map-style `env = { ... }`.
 - Drop to the verbose canonical `workload { run { ... } }` form only when a
   runtime-specific option has no compact helper yet.
+
+
+## Readiness Gates
+
+`depends_on` defines the deploy graph. When a dependency has
+`health.readiness`, orch waits for that probe before starting downstream
+workloads. Without a readiness probe, the dependency is considered ready after
+its runtime provider reports a successful start.
+
+The current readiness probes are intentionally small:
+
+- `tcp = true` checks that the endpoint port accepts TCP connections.
+- `http = "/path"` sends an HTTP GET and treats 2xx/3xx as ready.
+- `interval`, `timeout`, `retries`, and `start_period` control wait timing.
 
 ## Current Docker Provider Boundaries
 
@@ -196,8 +235,8 @@ The manifest intentionally stays inside the current runtime surface:
 - Workload DNS is platform-managed. Configure `dns.workload.upstream` when
   workloads also need non-orch DNS names, instead of adding per-workload
   resolver settings.
-- `depends_on` is a scheduling/deploy graph signal today; it is not yet a
-  readiness gate.
+- `depends_on` is a scheduling/deploy graph signal and readiness gate when the
+  dependency declares `health.readiness`.
 - Workload `endpoint` entries feed DNS/ingress intent; they do not publish host
   ports directly.
 - Workload `mounts` are local runtime mounts. They persist on the node/Docker

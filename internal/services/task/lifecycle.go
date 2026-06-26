@@ -144,23 +144,25 @@ func (s *Service) stopLocalWorkload(ctx context.Context, meta deployv1.Metadata,
 	return nil
 }
 
-// DeployWorkerWorkload executes a workload assigned by another node. It intentionally bypasses Raft desired-state
-// mutation; callers must already have gone through SubmitDeploy on the scheduling node.
+// WorkerDeployResult describes the runtime address returned by a worker deploy.
 type WorkerDeployResult struct {
 	Address string
 }
 
+// DeployWorkerWorkload executes a workload assigned by another node. It intentionally bypasses Raft desired-state
+// mutation; callers must already have gone through SubmitDeploy on the scheduling node.
 func (s *Service) DeployWorkerWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignedNode string) (WorkerDeployResult, error) {
 	if err := s.validateWorkerWorkload(meta, workload, assignedNode); err != nil {
 		return WorkerDeployResult{}, err
 	}
 	self := s.local.String()
-	if err := s.deployLocalWorkload(ctx, meta, workload, self); err != nil {
+	result, err := s.runLocalWorkload(ctx, meta, workload, self)
+	if err != nil {
 		s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
 		return WorkerDeployResult{}, err
 	}
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "success")
-	return WorkerDeployResult{Address: s.localWorkloadAddress(meta, workload.Name)}, nil
+	return WorkerDeployResult{Address: result.Address}, nil
 }
 func (s *Service) StopWorkerWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignedNode string) error {
 	if err := s.validateWorkerWorkload(meta, workload, assignedNode); err != nil {

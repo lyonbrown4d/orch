@@ -139,7 +139,7 @@ func mapService(name string, s composetypes.ServiceConfig, rep *Report) (deployv
 	}
 
 	if s.HealthCheck != nil && !s.HealthCheck.Disable {
-		rep.warnf("service %q: healthcheck is not mapped (only HTTP probes exist in canonical v1)", name)
+		rep.warnf("service %q: healthcheck is not mapped to canonical HTTP/TCP probes yet", name)
 	}
 
 	var extraVol []deployv1.Volume

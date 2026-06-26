@@ -133,5 +133,12 @@ func (s *Service) runLocalWorkload(ctx context.Context, meta deployv1.Metadata, 
 	if err := s.deployLocalWorkload(ctx, meta, workload, nodeID); err != nil {
 		return workloadRunResult{}, err
 	}
-	return workloadRunResult{Status: workloadmeta.AssignmentStatusRunning, Address: s.localWorkloadAddress(meta, workload.Name)}, nil
+	address := s.localWorkloadAddress(meta, workload.Name)
+	if err := s.waitWorkloadReadiness(ctx, meta, workload, address); err != nil {
+		if stopErr := s.stopLocalWorkload(ctx, meta, workload); stopErr != nil {
+			s.logger.Warn("stop workload after readiness failure", "workload", workload.Name, "error", stopErr)
+		}
+		return workloadRunResult{}, err
+	}
+	return workloadRunResult{Status: workloadmeta.AssignmentStatusRunning, Address: address}, nil
 }

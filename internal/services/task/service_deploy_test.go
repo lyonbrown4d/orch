@@ -87,7 +87,7 @@ func TestSubmitDeployDispatchesRemoteWorker(t *testing.T) {
 	app := deployApp("remote-demo", dockerWorkload("worker", "busybox", workloadPreferred("node-b")))
 
 	harness.submitDeploy(t, app)
-	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatchCh, 3*time.Second), "node-b", "worker")
+	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatchCh), "node-b")
 	harness.requireNoLocalDeploy(t)
 	harness.requireRegistryRecord(t, "worker", "node-b", "running", 3*time.Second)
 	assignment := harness.requireAssignment(t, app, "worker", "node-b", workloadmeta.AssignmentStatusRunning)
@@ -106,7 +106,7 @@ func TestSubmitDeployDispatchesConfiguredPreferredWorkerWithoutCapacitySnapshot(
 	app := deployApp("remote-no-capacity", dockerWorkload("worker", "busybox", workloadPreferred("node-b")))
 
 	harness.submitDeploy(t, app)
-	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatchCh, 3*time.Second), "node-b", "worker")
+	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatchCh), "node-b")
 	harness.requireNoLocalDeploy(t)
 	assignment := harness.requireAssignment(t, app, "worker", "node-b", workloadmeta.AssignmentStatusRunning)
 	requireNonEmptyGeneration(t, assignment)

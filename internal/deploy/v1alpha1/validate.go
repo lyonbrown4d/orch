@@ -156,6 +156,7 @@ func (w *Workload) validate(seen *set.Set[string]) error {
 		w.validateEnv,
 		w.validateReplicaCount,
 		w.validateResources,
+		w.validateHealth,
 	}
 	for _, validate := range validators {
 		if err := validate(); err != nil {

@@ -121,12 +121,12 @@ func writeWorkerResponse(t *testing.T, w http.ResponseWriter, v any) {
 	}
 }
 
-func waitWorkerDispatch(t *testing.T, dispatchCh <-chan workerapi.DeployWorkloadBody, timeout time.Duration) workerapi.DeployWorkloadBody {
+func waitWorkerDispatch(t *testing.T, dispatchCh <-chan workerapi.DeployWorkloadBody) workerapi.DeployWorkloadBody {
 	t.Helper()
 	select {
 	case got := <-dispatchCh:
 		return got
-	case <-time.After(timeout):
+	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for worker dispatch")
 		return workerapi.DeployWorkloadBody{}
 	}
@@ -154,9 +154,9 @@ func waitWorkerLogs(t *testing.T, logsCh <-chan workerapi.WorkloadLogsBody, time
 	}
 }
 
-func requireWorkerDispatch(t *testing.T, got workerapi.DeployWorkloadBody, nodeID, workloadName string) {
+func requireWorkerDispatch(t *testing.T, got workerapi.DeployWorkloadBody, nodeID string) {
 	t.Helper()
-	if got.Node != nodeID || got.Workload.Name != workloadName {
+	if got.Node != nodeID || got.Workload.Name != "worker" {
 		t.Fatalf("dispatch request = %#v", got)
 	}
 }

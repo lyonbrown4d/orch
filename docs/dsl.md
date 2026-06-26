@@ -746,7 +746,7 @@ Current workload fields supported end-to-end:
 - `mount(volumes.xxx, "/path")`
 - `env { set("KEY", value) }`
 - `resources { cpu(...) memory(...) }`
-- `health { readiness/liveness/startup { http("/path", endpointRef) } }`
+- `health { readiness/liveness/startup { http/path/tcp endpoint timing fields } }`
 
 Current typed refs supported end-to-end:
 
@@ -808,8 +808,7 @@ Known gaps and limits as of March 26, 2026:
 - `volume("name")` currently models identity and `mount(...)` refs, but not the
   full persistent/ephemeral/size policy surface yet.
 - `resources` currently only supports CPU and memory.
-- `health` currently only supports HTTP probes in the form
-  `http("/path", endpointRef)`.
+- `health` supports HTTP and TCP probes in canonical manifests and short `.orch` field blocks. The runtime currently enforces `readiness` as the deploy dependency gate; background liveness/startup controllers are not wired yet.
 - The current lowering path still mostly behaves as if each workload has one
   primary endpoint. Multi-endpoint modeling is the next important structural
   step.

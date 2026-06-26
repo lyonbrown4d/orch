@@ -31,7 +31,7 @@ func TestSubmitMigrateMovesWorkloadToTargetNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireMoveSummary(t, summary, 1, "node-b")
-	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatchCh, 3*time.Second), "node-b", "worker")
+	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatchCh), "node-b")
 	harness.requireAssignment(t, app, "worker", "node-b", workloadmeta.AssignmentStatusRunning)
 }
 
@@ -86,7 +86,7 @@ func TestSubmitFailoverContinuesWhenSourceStopFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireMoveSummary(t, summary, 1, "node-c")
-	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatcher.deployCh, 3*time.Second), "node-c", "worker")
+	requireWorkerDispatch(t, waitWorkerDispatch(t, dispatcher.deployCh), "node-c")
 	harness.requireAssignment(t, app, "worker", "node-c", workloadmeta.AssignmentStatusRunning)
 }
 

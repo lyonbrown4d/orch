@@ -17,6 +17,10 @@ func workloadFormSpecs() []schema.FormSpec {
 		mountFormSpec(),
 		envFormSpec(),
 		resourcesFormSpec(),
+		healthFormSpec(),
+		readinessFormSpec(),
+		livenessFormSpec(),
+		startupFormSpec(),
 		{
 			Name:        "runtime_options",
 			LabelKind:   schema.LabelNone,
@@ -161,6 +165,50 @@ func resourcesFormSpec() schema.FormSpec {
 	}
 }
 
+func healthFormSpec() schema.FormSpec {
+	return schema.FormSpec{
+		Name:        "health",
+		LabelKind:   schema.LabelNone,
+		BodyMode:    schema.BodyMixed,
+		Fields:      probeFieldSpecs(),
+		NestedForms: schema.NestedForms("readiness", "liveness", "startup"),
+	}
+}
+
+func readinessFormSpec() schema.FormSpec {
+	return probeFormSpec("readiness")
+}
+
+func livenessFormSpec() schema.FormSpec {
+	return probeFormSpec("liveness")
+}
+
+func startupFormSpec() schema.FormSpec {
+	return probeFormSpec("startup")
+}
+
+func probeFormSpec(name string) schema.FormSpec {
+	return schema.FormSpec{
+		Name:      name,
+		LabelKind: schema.LabelNone,
+		BodyMode:  schema.BodyFieldOnly,
+		Fields:    probeFieldSpecs(),
+	}
+}
+
+func probeFieldSpecs() *mapping.OrderedMap[string, schema.FieldSpec] {
+	return schema.Fields(
+		schema.FieldSpec{Name: "http", Type: schema.TypeString, Docs: "HTTP readiness path, for example /ready."},
+		schema.FieldSpec{Name: "path", Type: schema.TypeString, Docs: "Alias for http path."},
+		schema.FieldSpec{Name: "tcp", Type: schema.TypeBool, Default: false, HasDefault: true},
+		schema.FieldSpec{Name: "endpoint", Type: schema.TypeString, Docs: "Local workload endpoint name."},
+		schema.FieldSpec{Name: "port", Type: schema.TypeInt},
+		schema.FieldSpec{Name: "interval", Type: schema.TypeString},
+		schema.FieldSpec{Name: "timeout", Type: schema.TypeString},
+		schema.FieldSpec{Name: "retries", Type: schema.TypeInt},
+		schema.FieldSpec{Name: "start_period", Type: schema.TypeString},
+	)
+}
 func schedulingFormSpec() schema.FormSpec {
 	return schema.FormSpec{
 		Name:      "scheduling",
@@ -175,5 +223,5 @@ func schedulingFormSpec() schema.FormSpec {
 }
 
 func workloadNestedForms() *set.Set[string] {
-	return schema.NestedForms("run", "runtime_options", "docker", "containerd", "podman", "firecracker", "process", "systemd", "windows_service", "endpoint", "mount", "env", "resources", "scheduling")
+	return schema.NestedForms("run", "runtime_options", "docker", "containerd", "podman", "firecracker", "process", "systemd", "windows_service", "endpoint", "mount", "env", "resources", "health", "scheduling")
 }

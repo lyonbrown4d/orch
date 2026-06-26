@@ -726,7 +726,7 @@ source file
 - `mount(volumes.xxx, "/path")`
 - `env { set("KEY", value) }`
 - `resources { cpu(...) memory(...) }`
-- `health { readiness/liveness/startup { http("/path", endpointRef) } }`
+- `health { readiness/liveness/startup { http/path/tcp endpoint timing fields } }`
 
 当前已端到端支持的 typed ref：
 
@@ -782,7 +782,7 @@ source file
 - `config("name")` 与 `secret("name")` 当前主要表达 identity 与 refs，尚未支持完整 key/value payload
 - `volume("name")` 当前主要表达 identity 与 `mount(...)` refs，尚未支持完整 persistent/ephemeral/size 策略
 - `resources` 当前只支持 CPU 和 memory
-- `health` 当前只支持 `http("/path", endpointRef)` 这种 HTTP probe
+- `health` 当前在 canonical manifest 与短 `.orch` 字段块中支持 HTTP/TCP probe；运行时当前执行 `readiness` 作为 deploy 依赖 gate，后台 liveness/startup controller 尚未接入
 - 当前 lowering 路径仍基本按“每个 workload 一个主 endpoint”思路工作，多 endpoint 是下一步重要结构升级
 - `workload` 已是主 authoring object，但 legacy `services { val x = create(...) { ... } }` 仍保留为兼容路径
 - planner 输出同时暴露 `hir`、`ir` 和 canonical，是因为迁移仍在进行中

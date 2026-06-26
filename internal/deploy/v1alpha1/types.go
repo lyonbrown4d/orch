@@ -183,13 +183,23 @@ type Health struct {
 }
 
 type Probe struct {
-	HTTP *HTTPProbe `json:"http,omitempty" yaml:"http,omitempty"`
-	// Future: tcp, exec
+	HTTP        *HTTPProbe `json:"http,omitempty"        yaml:"http,omitempty"`
+	TCP         *TCPProbe  `json:"tcp,omitempty"         yaml:"tcp,omitempty"`
+	Interval    string     `json:"interval,omitempty"    yaml:"interval,omitempty"`
+	Timeout     string     `json:"timeout,omitempty"     yaml:"timeout,omitempty"`
+	Retries     int        `json:"retries,omitempty"     yaml:"retries,omitempty"`
+	StartPeriod string     `json:"startPeriod,omitempty" yaml:"startPeriod,omitempty"`
 }
 
 type HTTPProbe struct {
-	Path     string      `json:"path"     yaml:"path"`
-	Endpoint EndpointRef `json:"endpoint" yaml:"endpoint"`
+	Path     string      `json:"path,omitempty"    yaml:"path,omitempty"`
+	Endpoint EndpointRef `json:"endpoint,omitzero" yaml:"endpoint,omitempty"`
+	Port     int         `json:"port,omitempty"    yaml:"port,omitempty"`
+}
+
+type TCPProbe struct {
+	Endpoint EndpointRef `json:"endpoint,omitzero" yaml:"endpoint,omitempty"`
+	Port     int         `json:"port,omitempty"    yaml:"port,omitempty"`
 }
 
 type Scheduling struct {

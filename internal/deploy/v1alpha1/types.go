@@ -41,6 +41,7 @@ type Workload struct {
 	Mounts    []Mount    `json:"mounts,omitempty"    yaml:"mounts,omitempty"`
 	Resources *Resources `json:"resources,omitempty" yaml:"resources,omitempty"`
 	Health    *Health    `json:"health,omitempty"    yaml:"health,omitempty"`
+	Lifecycle *Lifecycle `json:"lifecycle,omitempty" yaml:"lifecycle,omitempty"`
 
 	Scheduling *Scheduling `json:"scheduling,omitempty" yaml:"scheduling,omitempty"`
 	Rollout    *Rollout    `json:"rollout,omitempty"    yaml:"rollout,omitempty"`
@@ -182,6 +183,20 @@ type Health struct {
 	Startup   *Probe `json:"startup,omitempty"   yaml:"startup,omitempty"`
 }
 
+type Lifecycle struct {
+	RestartPolicy RestartPolicy `json:"restartPolicy,omitempty" yaml:"restartPolicy,omitempty"`
+	MaxRestarts   int           `json:"maxRestarts,omitempty"   yaml:"maxRestarts,omitempty"`
+	RestartDelay  string        `json:"restartDelay,omitempty"  yaml:"restartDelay,omitempty"`
+}
+
+type RestartPolicy string
+
+const (
+	RestartPolicyAlways    RestartPolicy = "always"
+	RestartPolicyOnFailure RestartPolicy = "on-failure"
+	RestartPolicyNever     RestartPolicy = "never"
+)
+
 type Probe struct {
 	HTTP        *HTTPProbe `json:"http,omitempty"        yaml:"http,omitempty"`
 	TCP         *TCPProbe  `json:"tcp,omitempty"         yaml:"tcp,omitempty"`
@@ -247,8 +262,17 @@ type IngressRoute struct {
 // WorkloadRef refers to a workload by name. YAML form:
 // - "redis" (string)  OR  { name: "redis" }
 type WorkloadRef struct {
-	Name string `json:"name" yaml:"name"`
+	Name      string              `json:"name"                yaml:"name"`
+	Condition DependencyCondition `json:"condition,omitempty" yaml:"condition,omitempty"`
 }
+
+type DependencyCondition string
+
+const (
+	DependencyConditionStarted   DependencyCondition = "started"
+	DependencyConditionReady     DependencyCondition = "ready"
+	DependencyConditionCompleted DependencyCondition = "completed"
+)
 
 // VolumeRef refers to a volume by name. YAML form:
 // - "redisData"  OR  { name: "redisData" }

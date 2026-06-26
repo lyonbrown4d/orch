@@ -1092,8 +1092,12 @@ try {
     Write-Host "Manifest:             $manifestPath"
     Write-Host ""
 
+    Write-Host "Deploying $namespace/$appName through orch-cli apply..."
     Invoke-Checked $cliBin @("--server", $leaderURL, "apply", "--file", $manifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
+    Write-Host "Waiting for readiness-gated app state through orch-cli wait..."
+    Invoke-Checked $cliBin @("--server", $leaderURL, "wait", "app", $appName, "-n", $namespace, "--for", "running", "--timeout", "$($TimeoutSeconds)s")
     Wait-AssignmentsRunning -LeaderNode $leader
+    Write-Host "Checking ingress routing for $($scenarioCfg.Slug)..."
     Wait-ScenarioIngress
     Invoke-PlacementOperations -LeaderNode $leader
 

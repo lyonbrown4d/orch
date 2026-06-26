@@ -33,6 +33,18 @@ type Service struct {
 	reconcileCancel context.CancelFunc
 	reconcileRun    uint64
 	reconcileWG     sync.WaitGroup
+
+	healthMu       sync.Mutex
+	healthRun      uint64
+	healthMonitors map[string]workloadHealthMonitor
+
+	recoveryMu     sync.Mutex
+	recoveryCancel context.CancelFunc
+	recoveryRun    uint64
+	recoveryWG     sync.WaitGroup
+
+	restartMu       sync.Mutex
+	restartAttempts map[string]int
 }
 
 func NewService(logger *slog.Logger, metricService *metrics.Service, runtimeManager *runtime.Manager, registryService *registry.Service, cfg config.Config, bundle Bundle) *Service {

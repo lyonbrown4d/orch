@@ -8,8 +8,9 @@ These smoke tests verify heavier application deployments on the Docker runtime:
 
 The workload definitions are committed as native `.orch` DSL files under
 `examples/integration/`. The script does not generate deploy YAML; it starts the
-test cluster, calls the CLI with the workload file, waits for status, and then
-runs HTTP checks through ingress, and checks local runtime volume bindings when the scenario declares mounts.
+test cluster, calls the CLI with the workload file, waits for readiness-gated
+status through `orch wait app`, runs HTTP checks through ingress, and checks
+local runtime volume bindings when the scenario declares mounts.
 
 ## Runtime Isolation Modes
 
@@ -54,8 +55,9 @@ examples/integration/placement.orch
 ```
 
 Deploys `traefik/whoami:v1.11` as a lightweight HTTP service pinned to
-`node-b`. After the initial deploy succeeds, the smoke exercises the user-facing
-operation chain:
+`node-b`. The workload includes an HTTP readiness probe, so the app reaches
+`running` only after whoami accepts traffic. After the initial deploy succeeds,
+the smoke exercises the user-facing operation chain:
 
 - `migrate app placement-smoke --to <node> --workload whoami`
 - `rebalance app placement-smoke --workload whoami`
@@ -111,6 +113,17 @@ The workload placements are spread across `node-a`, `node-b`, and `node-c`. The
 test writes a small file through the filer HTTP API and reads it back from all
 three ingress ports. This covers the master/volume/filer path, replicated
 workload DNS records, and cross-node ingress forwarding.
+
+## Runnable Chain
+
+Each scenario follows the same user-facing path:
+
+1. Start a three-node orch-server Raft cluster in Docker.
+2. Deploy the committed `.orch` file with `orch apply --file ... --watch`.
+3. Wait for readiness-gated `running` state with `orch wait app <name> --for running`.
+4. Assert expected workload assignments and runtime volume bindings.
+5. Request the application through ingress.
+6. For `task smoke:docker-raft-placement-dind`, run `migrate`, `rebalance`, stop one non-leader node, run `failover`, and re-check ingress after each movement step.
 
 ## Direct Commands
 

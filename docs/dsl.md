@@ -182,6 +182,10 @@ Workload
   - readiness
   - liveness
   - startup
+- lifecycle
+  - restart_policy
+  - max_restarts
+  - restart_delay
 - scheduling
   - stateful
   - allow_leader
@@ -809,6 +813,7 @@ Known gaps and limits as of March 26, 2026:
   full persistent/ephemeral/size policy surface yet.
 - `resources` currently only supports CPU and memory.
 - `health` supports HTTP and TCP probes in canonical manifests and short `.orch` field blocks. The runtime currently enforces `readiness` as the deploy dependency gate; background liveness/startup controllers are not wired yet.
+- `lifecycle.restart_policy/max_restarts/restart_delay` is available in the canonical spec and `.orch` lowering for restart/failure-recovery controllers; runtime enforcement is not wired yet.
 - The current lowering path still mostly behaves as if each workload has one
   primary endpoint. Multi-endpoint modeling is the next important structural
   step.

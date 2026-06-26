@@ -131,7 +131,7 @@ func RenderUnitWithRoot(meta deployv1.Metadata, w deployv1.Workload, unitName, r
 func appendSystemdMounts(opts *[]*unit.UnitOption, root string, meta deployv1.Metadata, w deployv1.Workload) error {
 	mounts, err := runconfig.LocalMounts(root, meta, w)
 	if err != nil {
-		return err
+		return oopsx.B("runtime", "systemd").Wrapf(err, "resolve local mounts")
 	}
 	mounts.Range(func(_ int, mount runconfig.Mount) bool {
 		directive := "BindPaths"

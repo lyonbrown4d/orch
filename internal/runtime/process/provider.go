@@ -54,7 +54,7 @@ func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv
 		return oopsx.B("runtime", "process").Errorf("workload %q: run.exec.command or run.artifact.path is required", w.Name)
 	}
 	if err := runconfig.RejectUnsupportedMounts(deployv1.RuntimeProcess, w); err != nil {
-		return err
+		return oopsx.B("runtime", "process").Wrapf(err, "validate workload mounts")
 	}
 	if err := p.ensureNoLiveState(meta, w.Name); err != nil {
 		return err

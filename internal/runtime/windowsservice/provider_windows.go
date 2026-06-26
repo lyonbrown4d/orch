@@ -34,7 +34,7 @@ func (p *Provider) Deploy(ctx context.Context, meta deployv1.Metadata, w deployv
 		return oopsx.B("runtime", "windows-service").Wrapf(err, "deploy context")
 	}
 	if err := runconfig.RejectUnsupportedMounts(deployv1.RuntimeWindowsService, w); err != nil {
-		return err
+		return oopsx.B("runtime", "windows-service").Wrapf(err, "validate workload mounts")
 	}
 	spec, err := p.deployServiceSpec(meta, w)
 	if err != nil {

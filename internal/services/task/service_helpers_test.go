@@ -3,7 +3,6 @@ package task_test
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"testing"
 	"time"
 
@@ -24,14 +23,6 @@ import (
 
 const deployReconcileTimeout = 10 * time.Second
 
-type fakeRuntimeProvider struct {
-	mu       sync.Mutex
-	deployed []deployv1.Workload
-	stopped  []string
-	ch       chan deployv1.Workload
-	stopCh   chan string
-}
-
 type taskHarness struct {
 	ctx      context.Context
 	cfg      config.Config
@@ -44,36 +35,6 @@ type taskHarness struct {
 }
 
 type workloadOption func(*deployv1.Workload)
-
-func newFakeRuntimeProvider() *fakeRuntimeProvider {
-	return &fakeRuntimeProvider{
-		ch:     make(chan deployv1.Workload, 4),
-		stopCh: make(chan string, 4),
-	}
-}
-
-func (p *fakeRuntimeProvider) Kind() deployv1.RuntimeKind {
-	return deployv1.RuntimeDocker
-}
-
-func (p *fakeRuntimeProvider) Deploy(_ context.Context, _ deployv1.Metadata, workload deployv1.Workload) error {
-	p.mu.Lock()
-	p.deployed = append(p.deployed, workload)
-	p.mu.Unlock()
-	p.ch <- workload
-	return nil
-}
-
-func (p *fakeRuntimeProvider) Stop(_ context.Context, _ deployv1.Metadata, name string) error {
-	p.mu.Lock()
-	p.stopped = append(p.stopped, name)
-	p.mu.Unlock()
-	select {
-	case p.stopCh <- name:
-	default:
-	}
-	return nil
-}
 
 func newTaskHarness(t *testing.T, cfg config.Config, dispatcher task.WorkerDispatcher) *taskHarness {
 	t.Helper()
@@ -160,6 +121,12 @@ func workloadMount(volume, target string) workloadOption {
 			Volume: deployv1.VolumeRef{Name: volume},
 			Target: target,
 		})
+	}
+}
+
+func workloadRollingRollout() workloadOption {
+	return func(workload *deployv1.Workload) {
+		workload.Rollout = &deployv1.Rollout{Strategy: "rolling", MaxUnavailable: 1}
 	}
 }
 

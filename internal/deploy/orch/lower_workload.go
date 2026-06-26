@@ -41,6 +41,7 @@ func workloadLoweringSteps(m *mapper.Mapper, defaults appDefaults) []workloadLow
 		func(workload *v1.Workload, form *compiler.HIRForm) error {
 			return fillWorkloadHealth(m, workload, form)
 		},
+		fillWorkloadLifecycle,
 		func(workload *v1.Workload, form *compiler.HIRForm) error {
 			return fillWorkloadScheduling(m, workload, form)
 		},

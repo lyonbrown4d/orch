@@ -34,15 +34,21 @@ func Module() dix.Module {
 		dix.Hooks(
 			dix.OnStart(func(ctx context.Context, tasks *task.Service) error {
 				tasks.StartDeployReconcile(context.WithoutCancel(ctx))
+				tasks.StartFailureRecovery(context.WithoutCancel(ctx))
 				return nil
 			}, dix.LifecycleName(lifecycleplan.HookTaskReconcile), dix.LifecyclePriority(lifecycleplan.PriorityWorkload), dix.LifecycleTimeout(lifecycleplan.TimeoutReady)),
 			dix.OnStop2(func(ctx context.Context, logger *slog.Logger, tasks *task.Service) error {
-				logger.Info("lifecycle", "phase", "stopping", "component", "task-reconcile")
+				logger.Info("lifecycle", "phase", "stopping", "component", "task-controllers")
+				tasks.StopWorkloadHealthMonitors()
+				if err := tasks.StopFailureRecovery(ctx); err != nil {
+					logger.Warn("lifecycle", "phase", "stop_failed", "component", "failure-recovery", "error", err)
+					return oopsx.B("services").Wrapf(err, "stop failure recovery")
+				}
 				if err := tasks.StopDeployReconcile(ctx); err != nil {
 					logger.Warn("lifecycle", "phase", "stop_failed", "component", "task-reconcile", "error", err)
 					return oopsx.B("services").Wrapf(err, "stop task reconcile")
 				}
-				logger.Info("lifecycle", "phase", "stopped", "component", "task-reconcile")
+				logger.Info("lifecycle", "phase", "stopped", "component", "task-controllers")
 				return nil
 			}, dix.LifecycleName(lifecycleplan.HookTaskReconcile), dix.LifecyclePriority(lifecycleplan.PriorityWorkload), dix.LifecycleTimeout(lifecycleplan.TimeoutStop)),
 		),

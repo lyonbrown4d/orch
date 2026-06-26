@@ -38,7 +38,7 @@ func (s *Service) SubmitStop(ctx context.Context, meta deployv1.Metadata) error 
 }
 
 func (s *Service) SubmitStart(ctx context.Context, meta deployv1.Metadata) error {
-	return s.submitExistingDeployApp(ctx, meta, "started", s.deployAppWorkloads)
+	return s.submitExistingDeployApp(ctx, meta, "started", s.startAppWorkloads)
 }
 
 func (s *Service) submitExistingDeployApp(ctx context.Context, meta deployv1.Metadata, action string, run func(context.Context, *deployv1.App) error) error {
@@ -103,7 +103,11 @@ func (s *Service) stopAppWorkloads(ctx context.Context, app *deployv1.App) error
 }
 
 func (s *Service) stopWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload) error {
-	nodeID := s.stopTargetNode(meta, workload.Name)
+	return s.stopWorkloadOnNode(ctx, meta, workload, s.stopTargetNode(meta, workload.Name))
+}
+
+func (s *Service) stopWorkloadOnNode(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, nodeID string) error {
+	nodeID = strings.TrimSpace(nodeID)
 	if nodeID != "" && nodeID != s.local.String() {
 		return s.stopRemoteWorkload(ctx, meta, workload, nodeID)
 	}
@@ -137,6 +141,7 @@ func (s *Service) stopRemoteWorkload(ctx context.Context, meta deployv1.Metadata
 }
 
 func (s *Service) stopLocalWorkload(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload) error {
+	s.stopWorkloadHealthMonitor(meta, workload.Name)
 	if err := s.runtime.Stop(ctx, workload.Runtime, meta, workload.Name); err != nil {
 		return oopsx.B("task").Wrapf(err, "stop workload %s", workload.Name)
 	}
@@ -161,6 +166,8 @@ func (s *Service) DeployWorkerWorkload(ctx context.Context, meta deployv1.Metada
 		s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
 		return WorkerDeployResult{}, err
 	}
+	app := s.desiredHealthMonitorApp(meta, workload)
+	s.startLocalWorkloadHealthMonitor(ctx, &app, workload, self, AppGeneration(app), result.Address)
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "success")
 	return WorkerDeployResult{Address: result.Address}, nil
 }
@@ -168,6 +175,7 @@ func (s *Service) StopWorkerWorkload(ctx context.Context, meta deployv1.Metadata
 	if err := s.validateWorkerWorkload(meta, workload, assignedNode); err != nil {
 		return err
 	}
+	s.stopWorkloadHealthMonitor(meta, workload.Name)
 	if err := s.runtime.Stop(ctx, workload.Runtime, meta, workload.Name); err != nil {
 		s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
 		return oopsx.B("task", "worker").Wrapf(err, "stop worker workload")

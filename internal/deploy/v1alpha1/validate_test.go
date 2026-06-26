@@ -170,3 +170,63 @@ func TestValidateAllowsAcyclicWorkloadDependencies(t *testing.T) {
 		t.Fatalf("Validate() with acyclic dependencies = %v", err)
 	}
 }
+
+func TestWorkloadRefEffectiveConditionDefaultsToReady(t *testing.T) {
+	ref := deployv1.WorkloadRef{Name: "db"}
+	if got := ref.EffectiveCondition(); got != deployv1.DependencyConditionReady {
+		t.Fatalf("EffectiveCondition() = %q, want %q", got, deployv1.DependencyConditionReady)
+	}
+}
+
+func TestValidateAllowsCompletedJobDependency(t *testing.T) {
+	app := validApp()
+	app.Workloads = append(app.Workloads, deployv1.Workload{
+		Name:    "init-db",
+		Kind:    deployv1.WorkloadKindJob,
+		Runtime: deployv1.RuntimeDocker,
+		Run:     deployv1.RunSpec{Artifact: deployv1.ArtifactSpec{Image: "migrate"}},
+	})
+	app.Workloads[0].DependsOn = []deployv1.WorkloadRef{{
+		Name:      "init-db",
+		Condition: deployv1.DependencyConditionCompleted,
+	}}
+
+	if err := app.Validate(); err != nil {
+		t.Fatalf("Validate() with completed job dependency = %v", err)
+	}
+}
+
+func TestValidateRejectsInvalidDependencyCondition(t *testing.T) {
+	app := validApp()
+	app.Workloads = append(app.Workloads, deployv1.Workload{
+		Name:    "db",
+		Kind:    deployv1.WorkloadKindStateful,
+		Runtime: deployv1.RuntimeDocker,
+		Run:     deployv1.RunSpec{Artifact: deployv1.ArtifactSpec{Image: "postgres"}},
+	})
+	app.Workloads[0].DependsOn = []deployv1.WorkloadRef{{Name: "db", Condition: deployv1.DependencyCondition("healthy")}}
+
+	err := app.Validate()
+	if err == nil || !strings.Contains(err.Error(), "dependsOn[0].condition is invalid") {
+		t.Fatalf("Validate() error = %v, want dependency condition error", err)
+	}
+}
+
+func TestValidateRejectsCompletedDependencyOnService(t *testing.T) {
+	app := validApp()
+	app.Workloads = append(app.Workloads, deployv1.Workload{
+		Name:    "db",
+		Kind:    deployv1.WorkloadKindStateful,
+		Runtime: deployv1.RuntimeDocker,
+		Run:     deployv1.RunSpec{Artifact: deployv1.ArtifactSpec{Image: "postgres"}},
+	})
+	app.Workloads[0].DependsOn = []deployv1.WorkloadRef{{
+		Name:      "db",
+		Condition: deployv1.DependencyConditionCompleted,
+	}}
+
+	err := app.Validate()
+	if err == nil || !strings.Contains(err.Error(), "condition completed requires a job or cron dependency") {
+		t.Fatalf("Validate() error = %v, want completed dependency kind error", err)
+	}
+}

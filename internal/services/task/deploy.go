@@ -15,6 +15,10 @@ import (
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )
 
+type deployOptions struct {
+	forceStopped bool
+}
+
 // SubmitDeploy validates the app and appends it to the replicated desired state.
 // Local container startup happens asynchronously via [Service.StartDeployReconcile] on each node.
 func (s *Service) SubmitDeploy(ctx context.Context, app *deployv1.App) error {
@@ -43,11 +47,19 @@ func (s *Service) DeployApp(ctx context.Context, app *deployv1.App) error {
 // deployAppWorkloads runs placement against the node resource catalog, then deploys locally or dispatches to a
 // configured worker API when placement selects a remote node.
 func (s *Service) deployAppWorkloads(ctx context.Context, app *deployv1.App) error {
+	return s.deployAppWorkloadsWithOptions(ctx, app, deployOptions{})
+}
+
+func (s *Service) startAppWorkloads(ctx context.Context, app *deployv1.App) error {
+	return s.deployAppWorkloadsWithOptions(ctx, app, deployOptions{forceStopped: true})
+}
+
+func (s *Service) deployAppWorkloadsWithOptions(ctx context.Context, app *deployv1.App, opts deployOptions) error {
 	workloads, generation, err := s.prepareDeploy(ctx, app)
 	if err != nil {
 		return err
 	}
-	if err := s.deployOrderedWorkloads(ctx, app, workloads, generation); err != nil {
+	if err := s.deployOrderedWorkloads(ctx, app, workloads, generation, opts); err != nil {
 		return err
 	}
 	s.metrics.IncDeployApp(ctx, "success")
@@ -71,11 +83,11 @@ func (s *Service) prepareDeploy(ctx context.Context, app *deployv1.App) (*list.L
 	return workloads, AppGeneration(*app), nil
 }
 
-func (s *Service) deployOrderedWorkloads(ctx context.Context, app *deployv1.App, workloads *list.List[deployv1.Workload], generation string) error {
+func (s *Service) deployOrderedWorkloads(ctx context.Context, app *deployv1.App, workloads *list.List[deployv1.Workload], generation string, opts deployOptions) error {
 	self := s.local.String()
 	var deployErr error
 	workloads.Range(func(_ int, workload deployv1.Workload) bool {
-		if err := s.deployOneWorkload(ctx, app, workload, self, generation); err != nil {
+		if err := s.deployOneWorkload(ctx, app, workload, self, generation, opts); err != nil {
 			deployErr = err
 			return false
 		}
@@ -84,10 +96,13 @@ func (s *Service) deployOrderedWorkloads(ctx context.Context, app *deployv1.App,
 	return deployErr
 }
 
-func (s *Service) deployOneWorkload(ctx context.Context, app *deployv1.App, workload deployv1.Workload, self, generation string) error {
+func (s *Service) deployOneWorkload(ctx context.Context, app *deployv1.App, workload deployv1.Workload, self, generation string, opts deployOptions) error {
 	meta := app.Metadata
-	if s.workloadConverged(meta, workload, generation) {
-		return nil
+	if assignment, ok := s.workloadAssignment(meta, workload.Name); ok {
+		handled, err := s.handleExistingAssignment(ctx, app, workload, assignment, generation, opts)
+		if handled || err != nil {
+			return err
+		}
 	}
 	chosen, err := s.chooseWorkloadNode(ctx, workload, self)
 	if err != nil {
@@ -99,17 +114,6 @@ func (s *Service) deployOneWorkload(ctx context.Context, app *deployv1.App, work
 		return s.deployRemoteWorkload(ctx, app, workload, chosen, generation)
 	}
 	return s.deployLocalAssignedWorkload(ctx, app, workload, chosen, generation)
-}
-
-func (s *Service) workloadConverged(meta deployv1.Metadata, workload deployv1.Workload, generation string) bool {
-	if s == nil || s.raft == nil {
-		return false
-	}
-	assignment, ok := s.raft.GetWorkloadAssignment(workloadmeta.AssignmentKey(meta, workload.Name))
-	if !ok {
-		return false
-	}
-	return strings.TrimSpace(assignment.Generation) == strings.TrimSpace(generation) && assignment.Status == workloadmeta.AssignmentStatusRunning
 }
 
 func (s *Service) deployRemoteWorkload(ctx context.Context, app *deployv1.App, workload deployv1.Workload, nodeID, generation string) error {
@@ -135,6 +139,7 @@ func (s *Service) deployRemoteWorkload(ctx context.Context, app *deployv1.App, w
 	s.applyWorkloadVolumeBindings(ctx, app, workload, nodeID, volumemeta.BindingStatusBound, generation, "")
 	return nil
 }
+
 func (s *Service) deployLocalAssignedWorkload(ctx context.Context, app *deployv1.App, workload deployv1.Workload, nodeID, generation string) error {
 	meta := app.Metadata
 	result, err := s.runLocalWorkload(ctx, meta, workload, nodeID)
@@ -148,10 +153,13 @@ func (s *Service) deployLocalAssignedWorkload(ctx context.Context, app *deployv1
 	}
 	s.applyWorkloadAssignment(ctx, meta, workload, nodeID, status, generation, "", result.Address)
 	s.applyWorkloadVolumeBindings(ctx, app, workload, nodeID, volumemeta.BindingStatusBound, generation, "")
+	s.startLocalWorkloadHealthMonitor(ctx, app, workload, nodeID, generation, result.Address)
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "success")
 	return nil
 }
+
 func (s *Service) recordDeployFailure(ctx context.Context, app *deployv1.App, workload deployv1.Workload, nodeID, generation string, err error) {
+	s.stopWorkloadHealthMonitor(app.Metadata, workload.Name)
 	meta := app.Metadata
 	if s.skipStaleDeployFailure(meta, workload.Name, nodeID, generation) {
 		s.logger.Warn("skip stale deploy failure after workload converged elsewhere", "workload", workload.Name, "failed_node", nodeID, "error", err)

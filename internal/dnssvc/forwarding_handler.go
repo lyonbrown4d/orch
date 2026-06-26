@@ -97,7 +97,7 @@ func (h *forwardingHandler) ServeDNS(writer dns.ResponseWriter, request *dns.Msg
 	writeDNSReply(h.logger, writer, reply)
 }
 
-func (h *forwardingHandler) writeDynamicWorkloadA(writer dns.ResponseWriter, request *dns.Msg, reply *dns.Msg, rcode int) bool {
+func (h *forwardingHandler) writeDynamicWorkloadA(writer dns.ResponseWriter, request, reply *dns.Msg, rcode int) bool {
 	if h.workloads == nil || (rcode != dns.RcodeNameError && rcode != dns.RcodeRefused) {
 		return false
 	}

@@ -60,7 +60,7 @@ func TestServiceForwardsNonOrchQueriesToWorkloadUpstream(t *testing.T) {
 		}
 	})
 
-	response := queryTestDNS(t, svc.UDPAddr(), "www.example.net.", dns.TypeA)
+	response := queryTestDNS(t, svc.UDPAddr(), "www.example.net.")
 	if response.Rcode != dns.RcodeSuccess || len(response.Answer) != 1 {
 		t.Fatalf("external response rcode=%d answer=%#v", response.Rcode, response.Answer)
 	}
@@ -68,7 +68,7 @@ func TestServiceForwardsNonOrchQueriesToWorkloadUpstream(t *testing.T) {
 		t.Fatalf("upstream queries = %d, want 1", upstreamQueries.Load())
 	}
 
-	response = queryTestDNS(t, svc.UDPAddr(), "missing.orch.local.", dns.TypeA)
+	response = queryTestDNS(t, svc.UDPAddr(), "missing.orch.local.")
 	if response.Rcode != dns.RcodeNameError {
 		t.Fatalf("orch-zone miss rcode = %d, want NXDOMAIN", response.Rcode)
 	}
@@ -115,7 +115,7 @@ func TestServiceAnswersWorkloadDNSFromReplicatedAssignment(t *testing.T) {
 		}
 	})
 
-	response := queryTestDNS(t, svc.UDPAddr(), "remote.default.svc.orch.local.", dns.TypeA)
+	response := queryTestDNS(t, svc.UDPAddr(), "remote.default.svc.orch.local.")
 	if response.Rcode != dns.RcodeSuccess || len(response.Answer) != 1 {
 		t.Fatalf("assignment response rcode=%d answer=%#v", response.Rcode, response.Answer)
 	}
@@ -148,11 +148,11 @@ func startTestDNSServer(t *testing.T, handler dns.HandlerFunc) string {
 	return conn.LocalAddr().String()
 }
 
-func queryTestDNS(t *testing.T, addr, name string, qtype uint16) *dns.Msg {
+func queryTestDNS(t *testing.T, addr, name string) *dns.Msg {
 	t.Helper()
 
 	msg := new(dns.Msg)
-	msg.SetQuestion(name, qtype)
+	msg.SetQuestion(name, dns.TypeA)
 	response, _, err := (&dns.Client{Net: "udp"}).Exchange(msg, addr)
 	if err != nil {
 		t.Fatalf("dns query %s @ %s: %v", name, addr, err)
@@ -187,7 +187,7 @@ func TestForwardingHandlerWithoutUpstreamRefusesExternalQueries(t *testing.T) {
 
 	resolver := dnsserver.NewResolver(store, dnsserver.WithResolverLogger(testDNSLogger()))
 	server := startTestDNSServer(t, dnssvc.NewForwardingHandler(resolver, nil, nil).ServeDNS)
-	response := queryTestDNS(t, server, "www.example.net.", dns.TypeA)
+	response := queryTestDNS(t, server, "www.example.net.")
 	if response.Rcode != dns.RcodeRefused {
 		t.Fatalf("external rcode = %d, want refused", response.Rcode)
 	}

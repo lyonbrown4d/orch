@@ -23,6 +23,15 @@ app {
     }
 
     http(80)
+    health {
+      readiness {
+        http = "/"
+        endpoint = "http"
+        interval = "1s"
+        timeout = "500ms"
+        retries = 60
+      }
+    }
   }
 
   ingress public {

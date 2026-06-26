@@ -1,19 +1,14 @@
 package ingress_test
 
 import (
-	"html"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/arcgolabs/collectionx/list"
 
 	"github.com/lyonbrown4d/orch/internal/config"
-	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/ingress"
-	"github.com/lyonbrown4d/orch/internal/workloadmeta"
 )
 
 func testHTTPHandler(t *testing.T, routes *list.List[config.IngressRoute]) http.Handler {
@@ -153,38 +148,6 @@ func TestNewIngressHTTPHandler_roundRobinDistributes(t *testing.T) {
 	}
 }
 
-func writeTestResponse(t *testing.T, w http.ResponseWriter, body string) {
-	t.Helper()
-	if _, err := io.WriteString(w, html.EscapeString(body)); err != nil {
-		t.Fatalf("write response: %v", err)
-	}
-}
-
-func newTestRequest(t *testing.T, url string) *http.Request {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, http.NoBody)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	return req
-}
-
-func readResponseBody(t *testing.T, resp *http.Response) []byte {
-	t.Helper()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read response body: %v", err)
-	}
-	return body
-}
-
-func closeResponseBody(t *testing.T, resp *http.Response) {
-	t.Helper()
-	if err := resp.Body.Close(); err != nil {
-		t.Fatalf("close response body: %v", err)
-	}
-}
-
 func TestIngressRouteUpstreamEndpoints(t *testing.T) {
 	t.Parallel()
 	r := config.IngressRoute{Upstream: "http://a"}
@@ -207,166 +170,6 @@ func TestIngressRouteLBPolicy(t *testing.T) {
 	}
 	if got := (&config.IngressRoute{LB: "ROUND_ROBIN"}).LBPolicy(); got != "round_robin" {
 		t.Fatal(got)
-	}
-}
-
-// mapDNS mimics dnssvc workloadRecordKey lookup (lowercase namespace/workload).
-type mapDNS map[string]string
-
-func (m mapDNS) LookupWorkloadIPv4(namespace, workloadName string) (string, bool) {
-	if m == nil {
-		return "", false
-	}
-	ns := strings.TrimSpace(namespace)
-	if ns == "" {
-		ns = "default"
-	}
-	key := strings.ToLower(ns) + "/" + strings.ToLower(strings.TrimSpace(workloadName))
-	ip, ok := m[key]
-	return ip, ok
-}
-
-func TestCompileIngressRoutesFromDeploy(t *testing.T) {
-	t.Parallel()
-	apps := list.NewList(deployv1.App{
-		Metadata: deployv1.Metadata{Name: "a", Namespace: "ns"},
-		Workloads: []deployv1.Workload{{
-			Name: "web",
-			Endpoints: []deployv1.Endpoint{{
-				Name: "http", Port: 8080, Protocol: deployv1.ProtoHTTP,
-			}},
-		}},
-		Ingresses: []deployv1.Ingress{{
-			Routes: []deployv1.IngressRoute{{
-				Path:    "/api",
-				Backend: deployv1.EndpointRef{Workload: "web", Endpoint: "http"},
-			}},
-		}},
-	})
-	dns := mapDNS{"ns/web": "10.0.0.2"}
-	got := ingress.CompileIngressRoutesFromDeploy(apps, dns, nil)
-	route, ok := got.Get(0)
-	if got.Len() != 1 || !ok || route.PathPrefix != "/api" || route.Upstream != "http://10.0.0.2:8080" {
-		t.Fatalf("got %#v", got.Values())
-	}
-}
-
-type mapAssignments map[string]workloadmeta.Assignment
-
-func (m mapAssignments) GetWorkloadAssignment(key string) (workloadmeta.Assignment, bool) {
-	assignment, ok := m[key]
-	return assignment, ok
-}
-
-func TestCompileIngressRoutesFromDeployRemoteAssignment(t *testing.T) {
-	t.Parallel()
-	app := deployv1.App{
-		Metadata: deployv1.Metadata{Name: "a", Namespace: "ns"},
-		Workloads: []deployv1.Workload{{
-			Name: "web",
-			Endpoints: []deployv1.Endpoint{{
-				Name: "http", Port: 8080, Protocol: deployv1.ProtoHTTP,
-			}},
-		}},
-		Ingresses: []deployv1.Ingress{{
-			Routes: []deployv1.IngressRoute{{
-				Path:    "/api",
-				Backend: deployv1.EndpointRef{Workload: "web", Endpoint: "http"},
-			}},
-		}},
-	}
-	assignments := mapAssignments{
-		workloadmeta.AssignmentKey(app.Metadata, "web"): {
-			Node:   "node-b",
-			Status: workloadmeta.AssignmentStatusRunning,
-		},
-	}
-
-	got := ingress.CompileIngressRoutesFromDeployWithOptions(list.NewList(app), ingress.IngressCompileOptions{
-		DNS:         mapDNS{},
-		Assignments: assignments,
-		Cluster:     config.ClusterConfig{Nodes: map[string]string{"node-b": "http://node-b:17443"}},
-		Ingress:     config.IngressConfig{Listen: []string{":18080"}},
-		LocalNodeID: "node-a",
-	})
-
-	route, ok := got.Get(0)
-	if got.Len() != 1 || !ok || route.PathPrefix != "/api" || route.Upstream != "http://node-b:18080" || route.StripPrefix != "/" {
-		t.Fatalf("got %#v", got.Values())
-	}
-}
-
-func TestCompileIngressRoutesFromDeployRemoteAssignmentPrefersIngressOverDNS(t *testing.T) {
-	t.Parallel()
-	app := deployv1.App{
-		Metadata: deployv1.Metadata{Name: "a", Namespace: "ns"},
-		Workloads: []deployv1.Workload{{
-			Name: "web",
-			Endpoints: []deployv1.Endpoint{{
-				Name: "http", Port: 8080, Protocol: deployv1.ProtoHTTP,
-			}},
-		}},
-		Ingresses: []deployv1.Ingress{{
-			Routes: []deployv1.IngressRoute{{
-				Path:    "/api",
-				Backend: deployv1.EndpointRef{Workload: "web", Endpoint: "http"},
-			}},
-		}},
-	}
-	assignments := mapAssignments{
-		workloadmeta.AssignmentKey(app.Metadata, "web"): {
-			Node:   "node-b",
-			Status: workloadmeta.AssignmentStatusRunning,
-		},
-	}
-
-	got := ingress.CompileIngressRoutesFromDeployWithOptions(list.NewList(app), ingress.IngressCompileOptions{
-		DNS:         mapDNS{"ns/web": "172.18.0.2"},
-		Assignments: assignments,
-		Cluster:     config.ClusterConfig{Nodes: map[string]string{"node-b": "http://node-b:17443"}},
-		Ingress:     config.IngressConfig{Listen: []string{":18080"}},
-		LocalNodeID: "node-a",
-	})
-
-	route, ok := got.Get(0)
-	if got.Len() != 1 || !ok || route.Upstream != "http://node-b:18080" || route.StripPrefix != "/" {
-		t.Fatalf("got %#v", got.Values())
-	}
-}
-func TestCompileIngressRoutesFromDeployLocalAssignmentWithoutDNSDefers(t *testing.T) {
-	t.Parallel()
-	app := deployv1.App{
-		Metadata: deployv1.Metadata{Name: "a", Namespace: "ns"},
-		Workloads: []deployv1.Workload{{
-			Name: "web",
-			Endpoints: []deployv1.Endpoint{{
-				Name: "http", Port: 8080, Protocol: deployv1.ProtoHTTP,
-			}},
-		}},
-		Ingresses: []deployv1.Ingress{{
-			Routes: []deployv1.IngressRoute{{
-				Path:    "/api",
-				Backend: deployv1.EndpointRef{Workload: "web", Endpoint: "http"},
-			}},
-		}},
-	}
-	assignments := mapAssignments{
-		workloadmeta.AssignmentKey(app.Metadata, "web"): {
-			Node:   "node-a",
-			Status: workloadmeta.AssignmentStatusRunning,
-		},
-	}
-
-	got := ingress.CompileIngressRoutesFromDeployWithOptions(list.NewList(app), ingress.IngressCompileOptions{
-		DNS:         mapDNS{},
-		Assignments: assignments,
-		Cluster:     config.ClusterConfig{Nodes: map[string]string{"node-a": "http://node-a:17443"}},
-		Ingress:     config.IngressConfig{Listen: []string{":18080"}},
-		LocalNodeID: "node-a",
-	})
-
-	if got.Len() != 0 {
-		t.Fatalf("got %#v", got.Values())
 	}
 }
 

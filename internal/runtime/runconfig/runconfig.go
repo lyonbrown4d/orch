@@ -178,7 +178,7 @@ func EnsureLocalMountSources(mounts *list.List[Mount]) error {
 		if strings.TrimSpace(mount.SourcePath) == "" {
 			return true
 		}
-		if err := os.MkdirAll(mount.SourcePath, 0o755); err != nil {
+		if err := os.MkdirAll(mount.SourcePath, 0o750); err != nil {
 			ensureErr = oopsx.B("runtime", "mount").Wrapf(err, "create volume source %s", mount.SourcePath)
 			return false
 		}

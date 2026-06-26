@@ -65,8 +65,47 @@ func (a *App) validateWorkloadCrossRefs() error {
 }
 
 func (a *App) validateWorkloadDepends() error {
-	_, err := a.WorkloadsInDependencyOrder()
-	return err
+	if _, err := a.WorkloadsInDependencyOrder(); err != nil {
+		return err
+	}
+	return a.validateWorkloadDependencyConditions()
+}
+
+func (a *App) validateWorkloadDependencyConditions() error {
+	workloads := workloadMapByName(a)
+	var validateErr error
+	a.WorkloadList().Range(func(i int, workload Workload) bool {
+		workload.DependsOnList().Range(func(j int, ref WorkloadRef) bool {
+			validateErr = validateWorkloadDependencyCondition(i, j, ref, workloads)
+			return validateErr == nil
+		})
+		return validateErr == nil
+	})
+	return validateErr
+}
+
+func workloadMapByName(a *App) map[string]Workload {
+	workloads := map[string]Workload{}
+	a.WorkloadList().Range(func(_ int, workload Workload) bool {
+		workloads[strings.TrimSpace(workload.Name)] = workload
+		return true
+	})
+	return workloads
+}
+
+func validateWorkloadDependencyCondition(i, j int, ref WorkloadRef, workloads map[string]Workload) error {
+	if !IsDependencyCondition(ref.Condition) {
+		return oopsx.B("deploy").Errorf("workloads[%d].dependsOn[%d].condition is invalid: %q", i, j, strings.TrimSpace(string(ref.Condition)))
+	}
+	condition := ref.EffectiveCondition()
+	if condition != DependencyConditionCompleted {
+		return nil
+	}
+	dep, ok := workloads[strings.TrimSpace(ref.Name)]
+	if !ok || WorkloadKindCanComplete(dep.Kind) {
+		return nil
+	}
+	return oopsx.B("deploy").Errorf("workloads[%d].dependsOn[%d].condition completed requires a job or cron dependency", i, j)
 }
 
 func (a *App) validateWorkloadMounts() error {
@@ -157,6 +196,7 @@ func (w *Workload) validate(seen *set.Set[string]) error {
 		w.validateReplicaCount,
 		w.validateResources,
 		w.validateHealth,
+		w.validateLifecycle,
 	}
 	for _, validate := range validators {
 		if err := validate(); err != nil {

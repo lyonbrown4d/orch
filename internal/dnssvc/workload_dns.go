@@ -156,29 +156,40 @@ func (s *Service) lookupAssignmentWorkloadIPv4(namespace, workloadName string) (
 	if s == nil || s.assignments == nil {
 		return "", false
 	}
-	ns := workloadmeta.NamespaceOrDefault(namespace)
-	name := strings.TrimSpace(workloadName)
-	if name == "" {
+	target := workloadDNSLookupTarget{
+		namespace: workloadmeta.NamespaceOrDefault(namespace),
+		workload:  strings.TrimSpace(workloadName),
+	}
+	if target.workload == "" {
 		return "", false
 	}
 	assignments := s.assignments.ListWorkloadAssignments()
 	var out string
 	assignments.Range(func(_ int, assignment workloadmeta.Assignment) bool {
-		if workloadmeta.NamespaceOrDefault(assignment.Metadata.Namespace) != ns {
-			return true
+		address, ok := assignmentWorkloadIPv4(assignment, target)
+		if ok {
+			out = address
 		}
-		if strings.TrimSpace(assignment.Workload) != name {
-			return true
-		}
-		if strings.TrimSpace(assignment.Status) != workloadmeta.AssignmentStatusRunning {
-			return true
-		}
-		address := strings.TrimSpace(assignment.Address)
-		if net.ParseIP(address).To4() == nil {
-			return true
-		}
-		out = address
-		return false
+		return !ok
 	})
 	return out, out != ""
+}
+
+type workloadDNSLookupTarget struct {
+	namespace string
+	workload  string
+}
+
+func assignmentWorkloadIPv4(assignment workloadmeta.Assignment, target workloadDNSLookupTarget) (string, bool) {
+	if !assignmentMatchesWorkloadDNS(assignment, target) {
+		return "", false
+	}
+	address := strings.TrimSpace(assignment.Address)
+	return address, net.ParseIP(address).To4() != nil
+}
+
+func assignmentMatchesWorkloadDNS(assignment workloadmeta.Assignment, target workloadDNSLookupTarget) bool {
+	return workloadmeta.NamespaceOrDefault(assignment.Metadata.Namespace) == target.namespace &&
+		strings.TrimSpace(assignment.Workload) == target.workload &&
+		strings.TrimSpace(assignment.Status) == workloadmeta.AssignmentStatusRunning
 }

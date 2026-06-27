@@ -35,6 +35,9 @@ services:
 	if web.Run.Artifact.Image != "nginx:alpine" {
 		t.Fatalf("image %q", web.Run.Artifact.Image)
 	}
+	if len(web.Endpoints) != 1 || web.Endpoints[0].Port != 80 || web.Endpoints[0].HostPort != 8080 {
+		t.Fatalf("endpoints %+v", web.Endpoints)
+	}
 	if len(web.DependsOn) != 1 || web.DependsOn[0].Name != "db" {
 		t.Fatalf("dependsOn %+v", web.DependsOn)
 	}

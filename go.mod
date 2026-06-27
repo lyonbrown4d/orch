@@ -35,6 +35,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/docker/docker v28.5.2+incompatible
+	github.com/docker/go-connections v0.7.0
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 	github.com/go-co-op/gocron/v2 v2.21.2
 	github.com/gofiber/contrib/v3/prometheus v0.0.0-20260407033854-7fe5a88dc834
@@ -114,7 +115,6 @@ require (
 	github.com/containernetworking/plugins v1.0.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
-	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/expr-lang/expr v1.17.8 // indirect

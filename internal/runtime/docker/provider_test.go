@@ -105,3 +105,37 @@ func TestApplyLocalMounts(t *testing.T) {
 		t.Fatalf("mount = %#v", got)
 	}
 }
+
+func TestApplyEndpointPorts(t *testing.T) {
+	workload := deployv1.Workload{
+		Endpoints: []deployv1.Endpoint{
+			{Name: "http", Port: 80, Protocol: deployv1.ProtoHTTP, HostPort: 8080, HostIP: "127.0.0.1"},
+			{Name: "dns", Port: 53, Protocol: deployv1.ProtoUDP, HostPort: 5353},
+			{Name: "internal", Port: 9090, Protocol: deployv1.ProtoTCP},
+		},
+	}
+	ctrCfg := &container.Config{}
+	hostCfg := &container.HostConfig{}
+
+	runtimedocker.ApplyEndpointExposes(ctrCfg, workload)
+	runtimedocker.ApplyEndpointPortBindings(hostCfg, workload)
+
+	if _, ok := ctrCfg.ExposedPorts["80/tcp"]; !ok {
+		t.Fatalf("ExposedPorts = %#v", ctrCfg.ExposedPorts)
+	}
+	if _, ok := ctrCfg.ExposedPorts["53/udp"]; !ok {
+		t.Fatalf("ExposedPorts = %#v", ctrCfg.ExposedPorts)
+	}
+	if _, ok := ctrCfg.ExposedPorts["9090/tcp"]; !ok {
+		t.Fatalf("ExposedPorts = %#v", ctrCfg.ExposedPorts)
+	}
+	if got := hostCfg.PortBindings["80/tcp"]; len(got) != 1 || got[0].HostIP != "127.0.0.1" || got[0].HostPort != "8080" {
+		t.Fatalf("80/tcp bindings = %#v", got)
+	}
+	if got := hostCfg.PortBindings["53/udp"]; len(got) != 1 || got[0].HostPort != "5353" {
+		t.Fatalf("53/udp bindings = %#v", got)
+	}
+	if _, ok := hostCfg.PortBindings["9090/tcp"]; ok {
+		t.Fatalf("unexpected internal binding: %#v", hostCfg.PortBindings)
+	}
+}

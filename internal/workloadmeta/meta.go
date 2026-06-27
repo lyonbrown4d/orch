@@ -39,8 +39,9 @@ func SanitizeName(s string) string {
 // OrchContainerName is a stable container name derived from app metadata + workload.
 func OrchContainerName(meta deployv1.Metadata, workload string) string {
 	ns := NamespaceOrDefault(meta.Namespace)
+	app := strings.TrimSpace(meta.Name)
 	w := strings.TrimSpace(workload)
-	return fmt.Sprintf("orch-%s-%s", SanitizeName(ns), SanitizeName(w))
+	return fmt.Sprintf("orch-%s-%s-%s", SanitizeName(ns), SanitizeName(app), SanitizeName(w))
 }
 
 // LabelMap returns container labels for lookup on stop/diagnostics.

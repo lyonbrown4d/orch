@@ -3,6 +3,7 @@ package composeimport
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/arcgolabs/collectionx/list"
@@ -173,35 +174,63 @@ func endpointsFromCompose(service string, ports []composetypes.ServicePortConfig
 		return nil
 	}
 	var out []deployv1.Endpoint
-	for i, p := range ports {
-		if p.Target == 0 {
-			rep.warnf("service %q: ports[%d] has no container target port, skipped", service, i)
-			continue
+	for i, port := range ports {
+		endpoint, ok := endpointFromComposePort(service, i, port, rep)
+		if ok {
+			out = append(out, endpoint)
 		}
-		proto := deployv1.ProtoTCP
-		switch strings.ToLower(p.Protocol) {
-		case "udp":
-			proto = deployv1.ProtoUDP
-		case "tcp", "":
-			proto = deployv1.ProtoTCP
-		default:
-			rep.warnf("service %q: port %d protocol %q mapped as tcp", service, p.Target, p.Protocol)
-		}
-		// Use deterministic names that satisfy deploy name validation (first-class port ref).
-		protoStr := strings.ToLower(string(proto))
-		if protoStr == "" {
-			protoStr = "tcp"
-		}
-		ename := fmt.Sprintf("%s-%d", protoStr, p.Target)
-		out = append(out, deployv1.Endpoint{
-			Name:     ename,
-			Port:     int(p.Target),
-			Protocol: proto,
-		})
 	}
 	return out
 }
 
+func endpointFromComposePort(service string, index int, port composetypes.ServicePortConfig, rep *Report) (deployv1.Endpoint, bool) {
+	if port.Target == 0 {
+		rep.warnf("service %q: ports[%d] has no container target port, skipped", service, index)
+		return deployv1.Endpoint{}, false
+	}
+	proto := endpointProtoFromCompose(service, port, rep)
+	endpoint := deployv1.Endpoint{
+		Name:     endpointNameFromComposePort(proto, port.Target),
+		Port:     int(port.Target),
+		Protocol: proto,
+		HostIP:   strings.TrimSpace(port.HostIP),
+	}
+	applyEndpointPublishedPort(service, &endpoint, port, rep)
+	return endpoint, true
+}
+
+func endpointProtoFromCompose(service string, port composetypes.ServicePortConfig, rep *Report) deployv1.EndpointProto {
+	switch strings.ToLower(port.Protocol) {
+	case "udp":
+		return deployv1.ProtoUDP
+	case "tcp", "":
+		return deployv1.ProtoTCP
+	default:
+		rep.warnf("service %q: port %d protocol %q mapped as tcp", service, port.Target, port.Protocol)
+		return deployv1.ProtoTCP
+	}
+}
+
+func endpointNameFromComposePort(proto deployv1.EndpointProto, target uint32) string {
+	protoStr := strings.ToLower(string(proto))
+	if protoStr == "" {
+		protoStr = "tcp"
+	}
+	return fmt.Sprintf("%s-%d", protoStr, target)
+}
+
+func applyEndpointPublishedPort(service string, endpoint *deployv1.Endpoint, port composetypes.ServicePortConfig, rep *Report) {
+	published := strings.TrimSpace(port.Published)
+	if endpoint == nil || published == "" {
+		return
+	}
+	hostPort, err := strconv.Atoi(published)
+	if err != nil {
+		rep.warnf("service %q: port %d published value %q is not a single host port", service, port.Target, published)
+		return
+	}
+	endpoint.HostPort = hostPort
+}
 func dependsFromCompose(d composetypes.DependsOnConfig, rep *Report) []deployv1.WorkloadRef {
 	if len(d) == 0 {
 		return nil

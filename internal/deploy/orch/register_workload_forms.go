@@ -131,6 +131,8 @@ func endpointFormSpec() schema.FormSpec {
 		Fields: schema.Fields(
 			schema.FieldSpec{Name: "port", Type: schema.TypeInt, Required: true},
 			schema.FieldSpec{Name: "protocol", Type: schema.TypeString, Required: true},
+			schema.FieldSpec{Name: "host_port", Type: schema.TypeInt},
+			schema.FieldSpec{Name: "host_ip", Type: schema.TypeString},
 		),
 	}
 }

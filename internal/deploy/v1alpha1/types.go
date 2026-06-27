@@ -153,11 +153,12 @@ type WindowsServiceOptions struct {
 }
 
 type Endpoint struct {
-	Name     string        `json:"name"     yaml:"name"`
-	Port     int           `json:"port"     yaml:"port"`
-	Protocol EndpointProto `json:"protocol" yaml:"protocol"` // tcp|udp|http
+	Name     string        `json:"name"               yaml:"name"`
+	Port     int           `json:"port"               yaml:"port"`
+	Protocol EndpointProto `json:"protocol"           yaml:"protocol"` // tcp|udp|http
+	HostPort int           `json:"hostPort,omitempty" yaml:"hostPort,omitempty"`
+	HostIP   string        `json:"hostIP,omitempty"   yaml:"hostIP,omitempty"`
 }
-
 type EndpointProto string
 
 const (

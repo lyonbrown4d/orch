@@ -746,7 +746,7 @@ Current workload fields supported end-to-end:
 - `image(...)`
 - `replicas(...)`
 - `dependsOn(...)`
-- `endpoint("name") { port(...) protocol(...) }`
+- `endpoint("name") { port(...) protocol(...) host_port(...) host_ip(...) }`
 - `mount(volumes.xxx, "/path")`
 - `env { set("KEY", value) }`
 - `resources { cpu(...) memory(...) }`
@@ -780,6 +780,13 @@ Current ingress forms supported:
   binder, IR, and canonical lowering rather than only being reconstructed at
   the final lowering step
 
+Endpoint publishing for Docker-compatible runtimes:
+
+- `port` is always the workload/container port.
+- Optional `host_port` publishes that endpoint on the host, for example
+  `endpoint mysql { port = 3306 protocol = "tcp" host_port = 3306 }`.
+- Shorthand endpoint calls also accept publish args:
+  `tcp(5432, "postgres", 5432)` and `http(80, "console", 9001)`.
 Current canonical normalization already done by the implementation:
 
 - Workload kind normalization to `service | worker | job | cron | stateful`

@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	dockermount "github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 
 	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 	"github.com/lyonbrown4d/orch/internal/runtime/runconfig"
@@ -37,7 +39,7 @@ func (p *Provider) deployWorkloadContainer(ctx context.Context, cli *client.Clie
 }
 
 func dockerContainerConfig(meta deployv1.Metadata, w deployv1.Workload, ref string) *container.Config {
-	return &container.Config{
+	cfg := &container.Config{
 		Image:      ref,
 		Entrypoint: w.Run.Exec.Command,
 		Cmd:        w.Run.Exec.Args,
@@ -45,12 +47,15 @@ func dockerContainerConfig(meta deployv1.Metadata, w deployv1.Workload, ref stri
 		WorkingDir: strings.TrimSpace(w.Run.Cwd),
 		Labels:     ContainerLabels(meta, w),
 	}
+	ApplyEndpointExposes(cfg, w)
+	return cfg
 }
 
 func (p *Provider) dockerHostConfig(meta deployv1.Metadata, w deployv1.Workload) (*container.HostConfig, error) {
 	hostCfg := &container.HostConfig{}
 	applyDockerResources(hostCfg, w)
 	applyDockerOptions(hostCfg, w)
+	ApplyEndpointPortBindings(hostCfg, w)
 	ApplyWorkloadDNS(hostCfg, p.dns, meta.Namespace)
 	localMounts, err := runconfig.LocalMounts("", meta, w)
 	if err != nil {
@@ -60,6 +65,46 @@ func (p *Provider) dockerHostConfig(meta deployv1.Metadata, w deployv1.Workload)
 	return hostCfg, nil
 }
 
+func dockerEndpointPort(endpoint deployv1.Endpoint) nat.Port {
+	proto := "tcp"
+	if endpoint.Protocol == deployv1.ProtoUDP {
+		proto = "udp"
+	}
+	return nat.Port(strconv.Itoa(endpoint.Port) + "/" + proto)
+}
+
+// ApplyEndpointExposes records workload endpoints in Docker container metadata.
+func ApplyEndpointExposes(cfg *container.Config, w deployv1.Workload) {
+	if cfg == nil || len(w.Endpoints) == 0 {
+		return
+	}
+	if cfg.ExposedPorts == nil {
+		cfg.ExposedPorts = nat.PortSet{}
+	}
+	for _, endpoint := range w.Endpoints {
+		cfg.ExposedPorts[dockerEndpointPort(endpoint)] = struct{}{}
+	}
+}
+
+// ApplyEndpointPortBindings publishes endpoint ports on the Docker host when hostPort is set.
+func ApplyEndpointPortBindings(hostCfg *container.HostConfig, w deployv1.Workload) {
+	if hostCfg == nil || len(w.Endpoints) == 0 {
+		return
+	}
+	for _, endpoint := range w.Endpoints {
+		if endpoint.HostPort <= 0 {
+			continue
+		}
+		if hostCfg.PortBindings == nil {
+			hostCfg.PortBindings = nat.PortMap{}
+		}
+		port := dockerEndpointPort(endpoint)
+		hostCfg.PortBindings[port] = append(hostCfg.PortBindings[port], nat.PortBinding{
+			HostIP:   strings.TrimSpace(endpoint.HostIP),
+			HostPort: strconv.Itoa(endpoint.HostPort),
+		})
+	}
+}
 func applyDockerResources(hostCfg *container.HostConfig, w deployv1.Workload) {
 	if w.Resources == nil {
 		return

@@ -27,7 +27,32 @@ func lowerEndpoint(f *compiler.HIRForm) (v1.Endpoint, error) {
 		return endpoint, fmt.Errorf("endpoint %q: protocol is required", name)
 	}
 	endpoint.Protocol = v1.EndpointProto(strings.ToLower(strings.TrimSpace(proto)))
+	applyEndpointPublishFields(&endpoint, f)
 	return endpoint, nil
+}
+
+func applyEndpointPublishFields(endpoint *v1.Endpoint, f *compiler.HIRForm) {
+	if endpoint == nil || f == nil {
+		return
+	}
+	if hostPort, ok := intField(f, "host_port"); ok {
+		endpoint.HostPort = hostPort
+	}
+	if hostIP, ok := stringField(f, "host_ip"); ok {
+		endpoint.HostIP = strings.TrimSpace(hostIP)
+	}
+}
+
+func endpointPublishFromCall(endpoint *v1.Endpoint, call compiler.HIRCall, hostPortArg, hostIPArg int) {
+	if endpoint == nil {
+		return
+	}
+	if hostPort, ok := callIntArg(call, hostPortArg); ok {
+		endpoint.HostPort = hostPort
+	}
+	if hostIP, ok := callStringArg(call, hostIPArg); ok {
+		endpoint.HostIP = strings.TrimSpace(hostIP)
+	}
 }
 
 func lowerEndpointCalls(f *compiler.HIRForm) []v1.Endpoint {
@@ -72,7 +97,9 @@ func endpointFromProtocolCall(call compiler.HIRCall, proto v1.EndpointProto, def
 	if custom, ok := callStringArg(call, 1); ok && strings.TrimSpace(custom) != "" {
 		name = strings.TrimSpace(custom)
 	}
-	return v1.Endpoint{Name: name, Port: port, Protocol: proto}, true
+	endpoint := v1.Endpoint{Name: name, Port: port, Protocol: proto}
+	endpointPublishFromCall(&endpoint, call, 2, 3)
+	return endpoint, true
 }
 
 func endpointFromPortCall(call compiler.HIRCall) (v1.Endpoint, bool) {
@@ -89,7 +116,9 @@ func endpointFromPortCall(call compiler.HIRCall) (v1.Endpoint, bool) {
 	if custom, ok := callStringArg(call, 2); ok && strings.TrimSpace(custom) != "" {
 		name = strings.TrimSpace(custom)
 	}
-	return v1.Endpoint{Name: name, Port: port, Protocol: proto}, true
+	endpoint := v1.Endpoint{Name: name, Port: port, Protocol: proto}
+	endpointPublishFromCall(&endpoint, call, 3, 4)
+	return endpoint, true
 }
 
 func lowerMount(f *compiler.HIRForm) (v1.Mount, error) {

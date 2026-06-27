@@ -230,3 +230,40 @@ func TestValidateRejectsCompletedDependencyOnService(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want completed dependency kind error", err)
 	}
 }
+
+func TestValidateEndpointHostPublish(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostPort int
+		hostIP   string
+		want     string
+	}{
+		{name: "host port negative", hostPort: -1, want: "hostPort must be 1..65535"},
+		{name: "host port too large", hostPort: 70000, want: "hostPort must be 1..65535"},
+		{name: "host ip invalid", hostPort: 8080, hostIP: "not-an-ip", want: "hostIP is invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := validApp()
+			app.Workloads[0].Endpoints = []deployv1.Endpoint{{
+				Name:     "http",
+				Port:     80,
+				Protocol: deployv1.ProtoHTTP,
+				HostPort: tt.hostPort,
+				HostIP:   tt.hostIP,
+			}}
+
+			err := app.Validate()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+
+	app := validApp()
+	app.Workloads[0].Endpoints = []deployv1.Endpoint{{Name: "http", Port: 80, Protocol: deployv1.ProtoHTTP, HostPort: 8080, HostIP: "127.0.0.1"}}
+	if err := app.Validate(); err != nil {
+		t.Fatalf("Validate() with host publish = %v", err)
+	}
+}

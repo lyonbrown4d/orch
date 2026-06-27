@@ -269,21 +269,3 @@ func (w *Workload) validateResources() error {
 	}
 	return nil
 }
-
-func (e *Endpoint) validate() error {
-	if strings.TrimSpace(e.Name) == "" {
-		return oopsx.B("deploy").Errorf("name is required")
-	}
-	if !nameRe.MatchString(e.Name) {
-		return oopsx.B("deploy").Errorf("name is invalid: %q", e.Name)
-	}
-	if e.Port <= 0 || e.Port > 65535 {
-		return oopsx.B("deploy").Errorf("port must be 1..65535 (got %d)", e.Port)
-	}
-	switch e.Protocol {
-	case ProtoTCP, ProtoUDP, ProtoHTTP:
-	default:
-		return oopsx.B("deploy").Errorf("invalid protocol %q", e.Protocol)
-	}
-	return nil
-}

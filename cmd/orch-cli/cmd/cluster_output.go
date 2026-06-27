@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/arcgolabs/collectionx/list"
 	"github.com/spf13/cobra"
 
 	"github.com/lyonbrown4d/orch/internal/api"
+	deployv1 "github.com/lyonbrown4d/orch/internal/deploy/v1alpha1"
 )
 
 func writeDeployOperationHuman(label string, out *api.DeployOperationOutput) error {
@@ -111,6 +113,40 @@ func writeAppsHuman(items *list.List[api.AppItem]) error {
 	return writeTable(list.NewList("NAMESPACE", "NAME", "STATUS", "READY", "GENERATION", "OBSERVED", "COUNTS", "UPDATED", "ERROR"), rows)
 }
 
+func writeAppRevisionsHuman(items *list.List[api.AppRevisionItem]) error {
+	if items == nil || items.Len() == 0 {
+		return writeLine(viewMutedStyle.Render("No rollback revisions recorded."))
+	}
+	rows := list.NewGridWithCapacity[string](items.Len())
+	items.Range(func(_ int, item api.AppRevisionItem) bool {
+		rows.AddRow(workloadmetaNamespace(item.Metadata.Namespace), item.Metadata.Name, nonEmpty(item.Generation), strconv.Itoa(item.Workloads), revisionArtifacts(item.App))
+		return true
+	})
+	return writeTable(list.NewList("NAMESPACE", "NAME", "GENERATION", "WORKLOADS", "ARTIFACTS"), rows)
+}
+
+func revisionArtifacts(app deployv1.App) string {
+	parts := list.NewList[string]()
+	for i := range app.Workloads {
+		workload := app.Workloads[i]
+		artifact := workload.Run.Artifact.Image
+		if artifact == "" {
+			artifact = workload.Run.Artifact.Path
+		}
+		if artifact == "" {
+			artifact = "-"
+		}
+		parts.Add(workload.Name + "=" + artifact)
+	}
+	return strings.Join(parts.Values(), ",")
+}
+
+func workloadmetaNamespace(namespace string) string {
+	if namespace == "" {
+		return "default"
+	}
+	return namespace
+}
 func writeAppDetailHuman(app *api.AppDetailItem) error {
 	if app == nil {
 		return writeLine(viewMutedStyle.Render("No resources found."))

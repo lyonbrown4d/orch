@@ -25,6 +25,7 @@ func newStackCmd() *cobra.Command {
 	cmd.AddCommand(newStackApplyCmd("apply", "Deploy or update a stack from a manifest"))
 	cmd.AddCommand(newStackApplyCmd("update", "Update a stack from a manifest"))
 	cmd.AddCommand(newStackRollbackCmd())
+	cmd.AddCommand(newStackHistoryCmd())
 	cmd.AddCommand(newStackListCmd())
 	cmd.AddCommand(newStackStatusCmd())
 	cmd.AddCommand(newStackOperationCmd("delete NAME", "Stop and delete a stack", "delete", deleteAppStatus))
@@ -85,6 +86,42 @@ func newStackRollbackCmd() *cobra.Command {
 	return cmd
 }
 
+func newStackHistoryCmd() *cobra.Command {
+	var namespace string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:     "history NAME",
+		Aliases: []string{"revisions"},
+		Short:   "List stack rollback revisions",
+		Long:    `Lists previous desired app revisions stored in Raft. The newest previous revision is shown first.`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackHistoryCommand(contextFromCmd(cmd), namespace, args[0], jsonOut)
+		},
+	}
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Stack namespace")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
+	return cmd
+}
+
+func runStackHistoryCommand(ctx context.Context, namespace, name string, jsonOut bool) error {
+	conn := cliapp.ConnFromGlobals(serverURL, authToken)
+	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
+		out, err := c.ListDeployRevisions(ctx, namespace, name)
+		if err != nil {
+			return oopsx.B("cli").Wrapf(err, "list stack revisions")
+		}
+		if jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(out.Body.Items)
+		}
+		return writeAppRevisionsHuman(out.Body.Items)
+	}); err != nil {
+		return oopsx.B("cli").Wrapf(err, "stack history command")
+	}
+	return nil
+}
 func newStackListCmd() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{

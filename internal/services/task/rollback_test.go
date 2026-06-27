@@ -34,6 +34,27 @@ func TestSubmitRollbackRestoresPreviousDesiredApp(t *testing.T) {
 	}
 }
 
+func TestListAppRevisionsReturnsNewestPreviousFirst(t *testing.T) {
+	t.Parallel()
+
+	harness := newTaskHarness(t, config.Default(), nil)
+	appV1 := deployApp("history-demo", dockerWorkload("web", "nginx:1"))
+	appV2 := deployApp("history-demo", dockerWorkload("web", "nginx:2"))
+	appV3 := deployApp("history-demo", dockerWorkload("web", "nginx:3"))
+	harness.submitDeploy(t, appV1)
+	harness.submitDeploy(t, appV2)
+	harness.submitDeploy(t, appV3)
+
+	revisions, ok := harness.svc.ListAppRevisions(appV3.Metadata)
+	if !ok || revisions.Len() != 2 {
+		t.Fatalf("revisions len = %d ok=%t", revisions.Len(), ok)
+	}
+	newest, _ := revisions.Get(0)
+	oldest, _ := revisions.Get(1)
+	if newest.App.Workloads[0].Run.Artifact.Image != "nginx:2" || oldest.App.Workloads[0].Run.Artifact.Image != "nginx:1" {
+		t.Fatalf("revision order = %#v", revisions.Values())
+	}
+}
 func TestSubmitRollbackRequiresPreviousRevision(t *testing.T) {
 	t.Parallel()
 

@@ -98,6 +98,17 @@ func (c *Client) RollbackDeploy(ctx context.Context, namespace, name string) (*a
 	return &out, nil
 }
 
+func (c *Client) ListDeployRevisions(ctx context.Context, namespace, name string) (*api.ListAppRevisionsOutput, error) {
+	path, err := deployActionPath(api.PathV1DeployRevisions, namespace, name, "revisions")
+	if err != nil {
+		return nil, err
+	}
+	var out api.ListAppRevisionsOutput
+	if err := c.get(ctx, path, &out.Body); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
 func (c *Client) MigrateDeploy(ctx context.Context, namespace, name, targetNode string, workloads []string) (*api.DeployOperationOutput, error) {
 	return c.deployOperation(ctx, api.PathV1DeployMigrate, taskOperationMigrate, namespace, name, targetNode, workloads)
 }

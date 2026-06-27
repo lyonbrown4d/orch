@@ -46,6 +46,7 @@ func init() {
 	rootCmd.AddCommand(newValidateCmd())
 	rootCmd.AddCommand(newParseCmd())
 	rootCmd.AddCommand(newApplyCmd())
+	rootCmd.AddCommand(newStackCmd())
 	rootCmd.AddCommand(newStartCmd())
 	rootCmd.AddCommand(newDeleteCmd("delete", []string{"rm"}))
 	rootCmd.AddCommand(newStopCmd())

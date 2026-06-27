@@ -230,6 +230,12 @@ type Rollout struct {
 	MaxSurge       int    `json:"maxSurge,omitempty"       yaml:"maxSurge,omitempty"`
 }
 
+const (
+	RolloutStrategyRecreate        = "recreate"
+	RolloutStrategyStopBeforeStart = "stop-before-start"
+	RolloutStrategyRolling         = "rolling"
+)
+
 type Config struct {
 	Name string            `json:"name"           yaml:"name"`
 	Data map[string]string `json:"data,omitempty" yaml:"data,omitempty"`

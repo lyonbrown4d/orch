@@ -32,6 +32,10 @@ func (s *Service) SubmitDeploy(ctx context.Context, app *deployv1.App) error {
 	if s.raft == nil {
 		return oopsx.B("task").Errorf("raft service unavailable")
 	}
+	if err := s.preflightDeploy(ctx, app); err != nil {
+		s.metrics.IncDeployApp(ctx, "invalid")
+		return oopsx.B("task").Wrapf(err, "preflight deploy")
+	}
 	if err := s.raft.ApplyDeployApp(ctx, *app); err != nil {
 		return oopsx.B("task").Wrapf(err, "replicate deploy")
 	}

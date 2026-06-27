@@ -212,23 +212,28 @@ func newDescribeAppCmd() *cobra.Command {
 		Short: "Describe an app",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := contextFromCmd(cmd)
-			conn := cliapp.ConnFromGlobals(serverURL, authToken)
-			return cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
-				out, err := c.GetApp(ctx, namespace, args[0])
-				if err != nil {
-					return oopsx.B("cli").Wrapf(err, "describe app")
-				}
-				if jsonOut {
-					enc := json.NewEncoder(os.Stdout)
-					enc.SetIndent("", "  ")
-					return enc.Encode(out.Body)
-				}
-				return writeAppDetailHuman(&out.Body)
-			})
+			return runAppDetailCommand(contextFromCmd(cmd), namespace, args[0], "describe app", jsonOut)
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "App namespace")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
 	return cmd
+}
+func runAppDetailCommand(ctx context.Context, namespace, name, label string, jsonOut bool) error {
+	conn := cliapp.ConnFromGlobals(serverURL, authToken)
+	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
+		out, err := c.GetApp(ctx, namespace, name)
+		if err != nil {
+			return oopsx.B("cli").Wrapf(err, "%s", label)
+		}
+		if jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(out.Body)
+		}
+		return writeAppDetailHuman(&out.Body)
+	}); err != nil {
+		return oopsx.B("cli").Wrapf(err, "%s command", label)
+	}
+	return nil
 }

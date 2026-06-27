@@ -40,7 +40,7 @@ func (s *Service) handleExistingAssignment(
 	if failedAssignmentSameGeneration(assignment, generation) && !s.waitWorkloadRestartDelay(ctx, workload) {
 		return true, oopsx.B("task").Wrapf(ctx.Err(), "wait restart delay for workload %s", workload.Name)
 	}
-	if err := s.stopPreviousGeneration(ctx, app.Metadata, workload, assignment, generation); err != nil {
+	if err := s.stopPreviousGeneration(ctx, app.Metadata, workload, assignment, generation, workload.Rollout.EffectiveStrategy()); err != nil {
 		s.recordDeployFailure(ctx, app, workload, strings.TrimSpace(assignment.Node), generation, err)
 		return true, err
 	}
@@ -62,7 +62,7 @@ func failedAssignmentSameGeneration(assignment workloadmeta.Assignment, generati
 	return strings.TrimSpace(assignment.Generation) == strings.TrimSpace(generation) && strings.TrimSpace(assignment.Status) == workloadmeta.AssignmentStatusFailed
 }
 
-func (s *Service) stopPreviousGeneration(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignment workloadmeta.Assignment, generation string) error {
+func (s *Service) stopPreviousGeneration(ctx context.Context, meta deployv1.Metadata, workload deployv1.Workload, assignment workloadmeta.Assignment, generation, strategy string) error {
 	if strings.TrimSpace(assignment.Generation) == strings.TrimSpace(generation) {
 		return nil
 	}
@@ -76,6 +76,7 @@ func (s *Service) stopPreviousGeneration(ctx context.Context, meta deployv1.Meta
 		"node", nodeID,
 		"previous_generation", strings.TrimSpace(assignment.Generation),
 		"next_generation", strings.TrimSpace(generation),
+		"strategy", strings.TrimSpace(strategy),
 	)
 	return s.stopWorkloadOnNode(ctx, meta, workload, nodeID)
 }

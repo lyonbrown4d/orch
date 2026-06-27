@@ -197,6 +197,7 @@ func (w *Workload) validate(seen *set.Set[string]) error {
 		w.validateResources,
 		w.validateHealth,
 		w.validateLifecycle,
+		w.validateRollout,
 	}
 	for _, validate := range validators {
 		if err := validate(); err != nil {
@@ -266,6 +267,22 @@ func (w *Workload) validateResources() error {
 	}
 	if w.Resources.MemoryBytes < 0 {
 		return oopsx.B("deploy").Errorf("resources.memoryBytes must be >= 0")
+	}
+	return nil
+}
+
+func (w *Workload) validateRollout() error {
+	if w.Rollout == nil {
+		return nil
+	}
+	if !IsRolloutStrategy(w.Rollout.Strategy) {
+		return oopsx.B("deploy").Errorf("rollout.strategy is invalid: %q", strings.TrimSpace(w.Rollout.Strategy))
+	}
+	if w.Rollout.MaxUnavailable < 0 {
+		return oopsx.B("deploy").Errorf("rollout.maxUnavailable must be >= 0")
+	}
+	if w.Rollout.MaxSurge < 0 {
+		return oopsx.B("deploy").Errorf("rollout.maxSurge must be >= 0")
 	}
 	return nil
 }

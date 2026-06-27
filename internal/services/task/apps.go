@@ -1,9 +1,6 @@
 package task
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -179,14 +176,7 @@ func (s *Service) buildAppWorkloadView(meta deployv1.Metadata, workload deployv1
 }
 
 func AppGeneration(app deployv1.App) string {
-	copyApp := app
-	copyApp.Metadata.Namespace = workloadmeta.NamespaceOrDefault(copyApp.Metadata.Namespace)
-	b, err := json.Marshal(copyApp)
-	if err != nil {
-		return ""
-	}
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:8])
+	return deployv1.AppGeneration(app)
 }
 
 func appWorkloadsForView(app deployv1.App) *list.List[deployv1.Workload] {

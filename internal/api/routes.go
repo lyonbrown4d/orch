@@ -113,6 +113,7 @@ func newDeployEndpoints(taskSvc *task.Service, loaderSvc *loader.Loader, leader 
 		NewStartDeployEndpoint(taskSvc, leader, bool(auth)),
 		NewStopDeployEndpoint(taskSvc, leader, bool(auth)),
 		NewRestartDeployEndpoint(taskSvc, leader, bool(auth)),
+		NewRollbackDeployEndpoint(taskSvc, leader, bool(auth)),
 		NewMigrateDeployEndpoint(taskSvc, leader, bool(auth)),
 		NewFailoverDeployEndpoint(taskSvc, leader, bool(auth)),
 		NewRebalanceDeployEndpoint(taskSvc, leader, bool(auth)),

@@ -60,6 +60,24 @@ func (s *Service) submitExistingDeployApp(ctx context.Context, meta deployv1.Met
 	return nil
 }
 
+func (s *Service) SubmitRollback(ctx context.Context, meta deployv1.Metadata) error {
+	meta = normalizeOperationMetadata(meta)
+	if meta.Name == "" {
+		return oopsx.B("task").Errorf("metadata.name is required")
+	}
+	if s.raft == nil {
+		return oopsx.B("task").Errorf("raft service unavailable")
+	}
+	revision, ok := s.raft.GetPreviousDeployApp(meta)
+	if !ok {
+		return oopsx.B("task").Errorf("deploy app %s/%s has no rollback revision", workloadmeta.NamespaceOrDefault(meta.Namespace), meta.Name)
+	}
+	if err := s.SubmitDeploy(ctx, &revision.App); err != nil {
+		return oopsx.B("task").Wrapf(err, "rollback deploy app")
+	}
+	s.logger.Info("deploy rollback submitted", "app", meta.Name, "namespace", workloadmeta.NamespaceOrDefault(meta.Namespace), "generation", revision.Generation)
+	return nil
+}
 func (s *Service) SubmitRestart(ctx context.Context, meta deployv1.Metadata) error {
 	if err := s.SubmitStop(ctx, meta); err != nil {
 		return err

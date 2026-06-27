@@ -29,11 +29,12 @@ type schedulingFSM struct {
 }
 
 type fsmSnapshotState struct {
-	AppliedCommands uint64                             `json:"appliedCommands"`
-	NodeCapacity    map[string]nodecapacity.Snapshot   `json:"nodeCapacity,omitempty"`
-	DeployApps      map[string]deployv1.App            `json:"deployApps,omitempty"`
-	Assignments     map[string]workloadmeta.Assignment `json:"assignments,omitempty"`
-	VolumeBindings  map[string]volumemeta.Binding      `json:"volumeBindings,omitempty"`
+	AppliedCommands    uint64                             `json:"appliedCommands"`
+	NodeCapacity       map[string]nodecapacity.Snapshot   `json:"nodeCapacity,omitempty"`
+	DeployApps         map[string]deployv1.App            `json:"deployApps,omitempty"`
+	DeployAppRevisions map[string][]DeployAppRevision     `json:"deployAppRevisions,omitempty"`
+	Assignments        map[string]workloadmeta.Assignment `json:"assignments,omitempty"`
+	VolumeBindings     map[string]volumemeta.Binding      `json:"volumeBindings,omitempty"`
 }
 
 func (f *schedulingFSM) setNotifyDeploy(fn func()) {
@@ -131,7 +132,11 @@ func (f *schedulingFSM) applyDeployApp(data []byte) {
 	if f.state.DeployApps == nil {
 		f.state.DeployApps = make(map[string]deployv1.App)
 	}
-	f.state.DeployApps[deployAppMapKey(env.App.Metadata)] = env.App
+	key := deployAppMapKey(env.App.Metadata)
+	if current, ok := f.state.DeployApps[key]; ok && deployv1.AppGeneration(current) != deployv1.AppGeneration(env.App) {
+		f.appendDeployAppRevisionLocked(key, current)
+	}
+	f.state.DeployApps[key] = env.App
 	f.notifyDeployChanged()
 }
 
@@ -146,8 +151,12 @@ func (f *schedulingFSM) applyDeleteDeployApp(data []byte) {
 	if strings.TrimSpace(env.Metadata.Name) == "" {
 		return
 	}
+	key := deployAppMapKey(env.Metadata)
 	if f.state.DeployApps != nil {
-		delete(f.state.DeployApps, deployAppMapKey(env.Metadata))
+		delete(f.state.DeployApps, key)
+	}
+	if f.state.DeployAppRevisions != nil {
+		delete(f.state.DeployAppRevisions, key)
 	}
 	f.notifyDeployChanged()
 }

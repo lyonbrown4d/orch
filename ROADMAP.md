@@ -11,7 +11,7 @@ Snapshot date: June 27, 2026
       native `.orch` DSL.
 - [x] Docker deploy lifecycle with CLI/API `apply`, `get`, `describe`, `logs`,
       `stop`, `start`, `restart`, and `delete`.
-- [x] Stack-oriented CLI surface for apply/update/rollback-by-manifest, list,
+- [x] Stack-oriented CLI surface for apply/update/server-side rollback, list,
       status, and lifecycle operations.
 - [x] Host port conflict preflight against incoming stack manifests and existing
       desired apps before Raft state is accepted.
@@ -49,7 +49,7 @@ Snapshot date: June 27, 2026
       and Docker-based integration smoke.
 - [ ] Stack reliability hardening for multi-node deploy, cross-node forwarding,
       dependency ordering, health-gated readiness, and node-failure behavior.
-- [ ] Update and rollback hardening beyond rollback-by-manifest: rollout
+- [ ] Update and rollback hardening beyond previous-revision rollback: rollout
       progress deadlines, automatic rollback on failed replacement, rollout
       history, and disruption budgets.
 - [ ] Runtime parity hardening across `containerd`, `podman`, `firecracker`,

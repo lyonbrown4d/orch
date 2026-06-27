@@ -51,6 +51,7 @@ func init() {
 	rootCmd.AddCommand(newDeleteCmd("delete", []string{"rm"}))
 	rootCmd.AddCommand(newStopCmd())
 	rootCmd.AddCommand(newRestartCmd())
+	rootCmd.AddCommand(newRollbackCmd())
 	rootCmd.AddCommand(newMigrateCmd())
 	rootCmd.AddCommand(newFailoverCmd())
 	rootCmd.AddCommand(newRebalanceCmd())

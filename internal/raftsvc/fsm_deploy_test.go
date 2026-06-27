@@ -27,6 +27,34 @@ func TestRaftApplyDeployApp(t *testing.T) {
 	}
 }
 
+func TestRaftDeployAppStoresPreviousRevision(t *testing.T) {
+	svc := newStartedTestRaft(t, "node-fsm-app-revision")
+	waitRaftLeader(t, svc)
+
+	appV1 := deployAppFixture("demo", "default")
+	appV1.Workloads[0].Run.Artifact.Image = "nginx:1"
+	appV2 := deployAppFixture("demo", "default")
+	appV2.Workloads[0].Run.Artifact.Image = "nginx:2"
+	if err := svc.ApplyDeployApp(context.Background(), appV1); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ApplyDeployApp(context.Background(), appV2); err != nil {
+		t.Fatal(err)
+	}
+
+	revisions := svc.ListDeployAppRevisions(appV2.Metadata)
+	got, ok := revisions.Get(0)
+	if revisions.Len() != 1 || !ok {
+		t.Fatalf("revisions = %#v", revisions.Values())
+	}
+	if got.Generation != deployv1.AppGeneration(appV1) || got.App.Workloads[0].Run.Artifact.Image != "nginx:1" {
+		t.Fatalf("revision = %#v", got)
+	}
+	previous, ok := svc.GetPreviousDeployApp(appV2.Metadata)
+	if !ok || previous.Generation != deployv1.AppGeneration(appV1) {
+		t.Fatalf("previous = %#v ok=%t", previous, ok)
+	}
+}
 func TestRaftDeployAppDefaultNamespaceDelete(t *testing.T) {
 	svc := newStartedTestRaft(t, "node-fsm-delete")
 	waitRaftLeader(t, svc)

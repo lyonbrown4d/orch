@@ -281,3 +281,12 @@ type RestartDeployInput struct {
 type RestartDeployOutput struct {
 	Body DeployActionBody `json:"body"`
 }
+
+type RollbackDeployInput struct {
+	Namespace string `path:"namespace"`
+	Name      string `path:"name"`
+}
+
+type RollbackDeployOutput struct {
+	Body DeployActionBody `json:"body"`
+}

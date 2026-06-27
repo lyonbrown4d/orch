@@ -1,6 +1,7 @@
 package raftsvc
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/arcgolabs/collectionx/list"
@@ -37,6 +38,32 @@ func (f *schedulingFSM) listDeployApps() *list.List[deployv1.App] {
 	return out
 }
 
+func (f *schedulingFSM) listDeployAppRevisions(meta deployv1.Metadata) *list.List[DeployAppRevision] {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.state.DeployAppRevisions) == 0 {
+		return list.NewList[DeployAppRevision]()
+	}
+	revisions := f.state.DeployAppRevisions[deployAppMapKey(meta)]
+	if len(revisions) == 0 {
+		return list.NewList[DeployAppRevision]()
+	}
+	out := list.NewListWithCapacity[DeployAppRevision](len(revisions))
+	for i := range slices.Backward(revisions) {
+		out.Add(revisions[i])
+	}
+	return out
+}
+
+func (f *schedulingFSM) previousDeployApp(meta deployv1.Metadata) (DeployAppRevision, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	revisions := f.state.DeployAppRevisions[deployAppMapKey(meta)]
+	if len(revisions) == 0 {
+		return DeployAppRevision{}, false
+	}
+	return revisions[len(revisions)-1], true
+}
 func (f *schedulingFSM) listAssignments() *list.List[workloadmeta.Assignment] {
 	f.mu.Lock()
 	defer f.mu.Unlock()

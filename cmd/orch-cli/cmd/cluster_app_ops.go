@@ -55,6 +55,16 @@ func newRestartCmd() *cobra.Command {
 	})
 }
 
+func newRollbackCmd() *cobra.Command {
+	return newAppStatusCmd(appStatusCommandSpec{
+		Use:    "rollback app NAME",
+		Short:  "Roll back a deployed app to the previous desired revision",
+		Long:   `Restores the previous desired app revision stored in Raft and lets reconcile apply it.`,
+		Label:  "rollback",
+		Action: rollbackAppStatus,
+	})
+}
+
 func newMigrateCmd() *cobra.Command {
 	var targetNode string
 	cmd := newDeployOperationCmd(deployOperationCommandSpec{
@@ -188,6 +198,14 @@ func restartAppStatus(ctx context.Context, c *apiclient.Client, namespace, name 
 	out, err := c.RestartDeploy(ctx, namespace, name)
 	if err != nil {
 		return appStatusBody{}, nil, oopsx.B("cli").Wrapf(err, "restart deploy")
+	}
+	return appStatusBody{App: out.Body.App, Namespace: out.Body.Namespace, Status: out.Body.Status}, out.Body, nil
+}
+
+func rollbackAppStatus(ctx context.Context, c *apiclient.Client, namespace, name string) (appStatusBody, any, error) {
+	out, err := c.RollbackDeploy(ctx, namespace, name)
+	if err != nil {
+		return appStatusBody{}, nil, oopsx.B("cli").Wrapf(err, "rollback deploy")
 	}
 	return appStatusBody{App: out.Body.App, Namespace: out.Body.Namespace, Status: out.Body.Status}, out.Body, nil
 }

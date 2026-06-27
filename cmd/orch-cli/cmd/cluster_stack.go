@@ -24,7 +24,7 @@ func newStackCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newStackApplyCmd("apply", "Deploy or update a stack from a manifest"))
 	cmd.AddCommand(newStackApplyCmd("update", "Update a stack from a manifest"))
-	cmd.AddCommand(newStackApplyCmd("rollback", "Roll back a stack by applying a known-good manifest"))
+	cmd.AddCommand(newStackRollbackCmd())
 	cmd.AddCommand(newStackListCmd())
 	cmd.AddCommand(newStackStatusCmd())
 	cmd.AddCommand(newStackOperationCmd("delete NAME", "Stop and delete a stack", "delete", deleteAppStatus))
@@ -68,6 +68,23 @@ func newStackApplyCmd(use, short string) *cobra.Command {
 	return cmd
 }
 
+func newStackRollbackCmd() *cobra.Command {
+	var namespace string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "rollback NAME",
+		Short: "Roll back a stack to the previous desired revision",
+		Long:  `Restores the previous desired app revision stored in Raft and lets reconcile apply it. To roll back to an explicit file, use stack apply -f FILE.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackOperationCommand(contextFromCmd(cmd), namespace, args[0], "rollback", jsonOut, rollbackAppStatus)
+		},
+	}
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Stack namespace")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
+	return cmd
+}
+
 func newStackListCmd() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -106,27 +123,33 @@ func newStackOperationCmd(use, short, label string, action appStatusAction) *cob
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := contextFromCmd(cmd)
-			conn := cliapp.ConnFromGlobals(serverURL, authToken)
-			return cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
-				body, raw, err := action(ctx, c, namespace, args[0])
-				if err != nil {
-					return oopsx.B("cli").Wrapf(err, "%s stack", label)
-				}
-				if jsonOut {
-					enc := json.NewEncoder(os.Stdout)
-					enc.SetIndent("", "  ")
-					return enc.Encode(raw)
-				}
-				return writeInfoLine(label,
-					viewField("status", statusBadge(body.Status)),
-					viewField("stack", body.App),
-					viewField("namespace", body.Namespace),
-				)
-			})
+			return runStackOperationCommand(contextFromCmd(cmd), namespace, args[0], label, jsonOut, action)
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Stack namespace")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
 	return cmd
+}
+
+func runStackOperationCommand(ctx context.Context, namespace, name, label string, jsonOut bool, action appStatusAction) error {
+	conn := cliapp.ConnFromGlobals(serverURL, authToken)
+	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
+		body, raw, err := action(ctx, c, namespace, name)
+		if err != nil {
+			return oopsx.B("cli").Wrapf(err, "%s stack", label)
+		}
+		if jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(raw)
+		}
+		return writeInfoLine(label,
+			viewField("status", statusBadge(body.Status)),
+			viewField("stack", body.App),
+			viewField("namespace", body.Namespace),
+		)
+	}); err != nil {
+		return oopsx.B("cli").Wrapf(err, "%s stack command", label)
+	}
+	return nil
 }

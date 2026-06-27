@@ -19,6 +19,7 @@ const (
 	PathV1DeployMigrate    = BasePath + "/v1/deploy"
 	PathV1DeployRebalance  = BasePath + "/v1/deploy"
 	PathV1DeployRestart    = BasePath + "/v1/deploy"
+	PathV1DeployRollback   = BasePath + "/v1/deploy"
 	PathV1DeployStart      = BasePath + "/v1/deploy"
 	PathV1DeployStop       = BasePath + "/v1/deploy"
 	PathV1DeploySource     = BasePath + "/v1/deploy/source"

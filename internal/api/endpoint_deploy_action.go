@@ -42,6 +42,9 @@ type StopDeployEndpoint = deployActionEndpoint[StopDeployInput, StopDeployOutput
 // RestartDeployEndpoint serves POST /api/v1/deploy/{namespace}/{name}/restart.
 type RestartDeployEndpoint = deployActionEndpoint[RestartDeployInput, RestartDeployOutput]
 
+// RollbackDeployEndpoint serves POST /api/v1/deploy/{namespace}/{name}/rollback.
+type RollbackDeployEndpoint = deployActionEndpoint[RollbackDeployInput, RollbackDeployOutput]
+
 func NewStartDeployEndpoint(tasks *task.Service, leader *LeaderForwarder, openAPIAuthApply bool) *StartDeployEndpoint {
 	return newDeployActionEndpoint(tasks, leader, openAPIAuthApply, startDeployActionConfig(), startDeployMeta, newStartDeployOutput)
 }
@@ -52,6 +55,10 @@ func NewStopDeployEndpoint(tasks *task.Service, leader *LeaderForwarder, openAPI
 
 func NewRestartDeployEndpoint(tasks *task.Service, leader *LeaderForwarder, openAPIAuthApply bool) *RestartDeployEndpoint {
 	return newDeployActionEndpoint(tasks, leader, openAPIAuthApply, restartDeployActionConfig(), restartDeployMeta, newRestartDeployOutput)
+}
+
+func NewRollbackDeployEndpoint(tasks *task.Service, leader *LeaderForwarder, openAPIAuthApply bool) *RollbackDeployEndpoint {
+	return newDeployActionEndpoint(tasks, leader, openAPIAuthApply, rollbackDeployActionConfig(), rollbackDeployMeta, newRollbackDeployOutput)
 }
 
 func newDeployActionEndpoint[I, O any](
@@ -165,6 +172,21 @@ func restartDeployActionConfig() deployActionConfig {
 	}
 }
 
+func rollbackDeployActionConfig() deployActionConfig {
+	return deployActionConfig{
+		basePath:    PathV1DeployRollback,
+		suffix:      "rollback",
+		description: "Roll back deploy desired state to the previous revision.",
+		operationID: "rollbackDeployApp",
+		summary:     "Roll back a deploy app",
+		detail:      "Restores the previous desired app revision stored in Raft and lets reconcile apply it. Followers forward to the known leader when configured.",
+		action:      "rollback",
+		status:      "accepted",
+		submit: func(ctx context.Context, tasks *task.Service, meta deployv1.Metadata) error {
+			return tasks.SubmitRollback(ctx, meta)
+		},
+	}
+}
 func startDeployMeta(in *StartDeployInput) deployv1.Metadata {
 	return deployv1.Metadata{Name: in.Name, Namespace: in.Namespace}
 }
@@ -174,6 +196,10 @@ func stopDeployMeta(in *StopDeployInput) deployv1.Metadata {
 }
 
 func restartDeployMeta(in *RestartDeployInput) deployv1.Metadata {
+	return deployv1.Metadata{Name: in.Name, Namespace: in.Namespace}
+}
+
+func rollbackDeployMeta(in *RollbackDeployInput) deployv1.Metadata {
 	return deployv1.Metadata{Name: in.Name, Namespace: in.Namespace}
 }
 
@@ -187,4 +213,8 @@ func newStopDeployOutput(body DeployActionBody) *StopDeployOutput {
 
 func newRestartDeployOutput(body DeployActionBody) *RestartDeployOutput {
 	return &RestartDeployOutput{Body: body}
+}
+
+func newRollbackDeployOutput(body DeployActionBody) *RollbackDeployOutput {
+	return &RollbackDeployOutput{Body: body}
 }

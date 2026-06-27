@@ -86,6 +86,18 @@ func (c *Client) RestartDeploy(ctx context.Context, namespace, name string) (*ap
 	return &out, nil
 }
 
+func (c *Client) RollbackDeploy(ctx context.Context, namespace, name string) (*api.RollbackDeployOutput, error) {
+	path, err := deployActionPath(api.PathV1DeployRollback, namespace, name, "rollback")
+	if err != nil {
+		return nil, err
+	}
+	var out api.RollbackDeployOutput
+	if err := c.post(ctx, path, struct{}{}, &out.Body); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) MigrateDeploy(ctx context.Context, namespace, name, targetNode string, workloads []string) (*api.DeployOperationOutput, error) {
 	return c.deployOperation(ctx, api.PathV1DeployMigrate, taskOperationMigrate, namespace, name, targetNode, workloads)
 }

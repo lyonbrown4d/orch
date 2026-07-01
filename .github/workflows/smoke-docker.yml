@@ -8,6 +8,11 @@ on:
         required: false
         type: boolean
         default: false
+      runtime_isolation:
+        description: 'Use per-node Docker-in-Docker isolation (real runtime movement)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,8 +49,15 @@ jobs:
       - name: Docker 3-node Raft stack smoke suite
         shell: pwsh
         run: |
-          if ('${{ github.event.inputs.full_suite }}' -eq 'true') {
+          $fullSuite = '${{ github.event.inputs.full_suite }}' -eq 'true'
+          $runtimeIsolation = '${{ github.event.inputs.runtime_isolation }}' -eq 'true'
+
+          if ($fullSuite -and $runtimeIsolation) {
+            task smoke:docker-raft-stack-suite-full-dind -CLI_ARGS "-TimeoutSeconds 420"
+          } elseif ($fullSuite) {
             task smoke:docker-raft-stack-suite-full -CLI_ARGS "-TimeoutSeconds 360"
+          } elseif ($runtimeIsolation) {
+            task smoke:docker-raft-stack-suite-dind -CLI_ARGS "-TimeoutSeconds 300"
           } else {
             task smoke:docker-raft-stack-suite -CLI_ARGS "-TimeoutSeconds 300"
           }

@@ -59,6 +59,7 @@ task smoke:local-podman-dns
 task smoke:local-podman-worker-dispatch
 task smoke:docker-raft-stack-suite
 task smoke:docker-raft-stack-suite-dind # validates per-node runtime movement (migrate/rebalance/failover path)
+task smoke:docker-raft-stack-suite-full-dind # optional dind runtime full-state scenarios
 task smoke:docker-raft-stack-suite-full  # optional stateful scenarios (nextcloud/seaweed)
 ```
 

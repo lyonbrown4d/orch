@@ -172,6 +172,15 @@ tasks:
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
 
+  smoke:docker-raft-stack-suite-full-dind:
+    desc: "Run Docker Raft full dind stack suite: placement, rollout, nextcloud, and seaweed"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -RuntimeIsolation dind {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout -RuntimeIsolation dind {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud -RuntimeIsolation dind {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed -RuntimeIsolation dind {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
   smoke:vagrant:
     desc: "Run a 3-node Vagrant smoke test (deploy -> status -> delete)"
     cmds:
@@ -247,4 +256,3 @@ tasks:
     cmds:
       - task release-gate:static
       - task smoke:local-container-runtimes
-

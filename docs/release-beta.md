@@ -86,23 +86,23 @@ The Taskfile exposes the same checks as:
 ```bash
 task release-gate:static
 task release-gate
+task release-gate:runtime
+task release-gate:full
+task release-gate:full-dind
 task release-gate:e2e
 ```
 
 `release-gate:static` runs the non-runtime checks plus the local Raft forwarding
-smoke. `release-gate` adds runtime smoke coverage. `release-gate:e2e` runs the
-extended full-chain smoke and keeps logs in the GitHub Actions artifact for CI runs.
+smoke. `release-gate` runs baseline + runtime smoke checks; `release-gate:runtime` runs only runtime smoke checks; `release-gate:full` runs shared full-chain e2e (baseline + runtime + shared runtime movement); and `release-gate:full-dind` runs the DinD movement full-chain path.
 `smoke:systemd-docker` is kept separate because it requires privileged Docker and systemd-in-container support.
-
-
 
 To run the same staged checks locally:
 
 ```bash
 task release-gate:static
-task release-gate:local CLI_ARGS="-Runtime"
-task release-gate:local CLI_ARGS="-Runtime -E2E"
-task release-gate:local CLI_ARGS="-Runtime -E2E -E2EDind"
+task release-gate:runtime
+task release-gate:full
+task release-gate:full-dind
 ```
 
 ### Manual Gate Workflow

@@ -295,6 +295,22 @@ tasks:
     cmds:
       - task smoke:full-chain-full
 
+
+  release-gate:full:
+    desc: "Run full local beta gate checks (baseline + runtime smoke + shared e2e)"
+    cmds:
+      - task release-gate:local CLI_ARGS="-Runtime -E2E"
+
+  release-gate:full-dind:
+    desc: "Run full local beta gate checks with DinD runtime movement coverage"
+    cmds:
+      - task release-gate:local CLI_ARGS="-Runtime -E2E -E2EDind"
+
+  release-gate:runtime:
+    desc: "Run baseline + runtime smoke checks"
+    cmds:
+      - task release-gate:local CLI_ARGS="-Runtime"
+
   release-gate:local:
     desc: "Run beta release gate checks with optional runtime/e2e toggles"
     cmds:

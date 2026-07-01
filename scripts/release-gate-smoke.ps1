@@ -17,6 +17,12 @@ else {
     Write-Host "[release-gate] Skipping baseline checks by request."
 }
 
+if ($E2EDind -and -not $E2E) {
+    Write-Host "[release-gate] E2EDind implies full e2e checks."
+    $E2E = $true
+}
+
+
 if ($Runtime) {
     Write-Host "[release-gate] Running local container runtime smoke checks..."
     task smoke:local-container-runtimes
@@ -33,3 +39,4 @@ if ($E2E) {
 }
 
 Write-Host "[release-gate] Completed."
+

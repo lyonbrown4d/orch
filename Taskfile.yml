@@ -146,6 +146,24 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:docker-raft-stack-suite:
+    desc: "Run stacked Docker Raft stack app suite: placement and rollout"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:docker-raft-stack-suite-full:
+    desc: "Run full Docker Raft stack app suite: placement, rollout, nextcloud, and seaweed"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
   smoke:vagrant:
     desc: "Run a 3-node Vagrant smoke test (deploy -> status -> delete)"
     cmds:

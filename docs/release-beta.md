@@ -57,6 +57,8 @@ task smoke:local-docker-worker-dispatch
 task smoke:local-podman
 task smoke:local-podman-dns
 task smoke:local-podman-worker-dispatch
+task smoke:docker-raft-stack-suite
+task smoke:docker-raft-stack-suite-full  # optional stateful scenarios (nextcloud/seaweed)
 ```
 
 Run the package/systemd smoke on hosts that allow privileged Docker containers:

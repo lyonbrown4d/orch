@@ -24,3 +24,17 @@ jobs:
       - name: Worker dispatch smoke
         shell: pwsh
         run: ./scripts/local-docker-worker-dispatch-smoke.ps1
+
+  docker-raft-stack-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Docker 3-node Raft stack smoke suite
+        shell: pwsh
+        run: task smoke:docker-raft-stack-suite -CLI_ARGS "-TimeoutSeconds 300"

@@ -39,6 +39,7 @@ Snapshot date: June 27, 2026
       and three-node Raft forwarding.
 - [x] Docker-based integration manifests for full-stack, Nextcloud, SeaweedFS,
       Kafka, and PostgreSQL HA scenarios.
+- [x] Docker-based e2e suites that drive `orch-cli stack apply/status/delete` against a three-node orch cluster and gateway request path.
 - [x] GoReleaser/nFPM packaging for archives and Linux `.deb`, `.rpm`, `.apk`.
 - [x] Repository lint is clean under `golangci-lint run ./...`.
 
@@ -96,8 +97,6 @@ Snapshot date: June 27, 2026
 ### Developer and user experience
 
 - [ ] Complete `.orch` DSL examples for common app shapes.
-- [ ] Docker-based e2e suites that drive `orch-cli stack apply/status/delete`
-      against a three-node orch cluster and gateway request path.
 - [ ] Pack format, metadata, and remote registry/distribution model.
 - [ ] External dashboard integration boundary documentation.
 - [ ] Release notes and migration notes for each beta cut.
@@ -107,3 +106,4 @@ Snapshot date: June 27, 2026
 - [ ] New Docker Compose migration/conversion tooling. The existing Compose
       import compatibility path can stay, but stack management should use orch
       manifests as the primary source of truth.
+

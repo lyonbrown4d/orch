@@ -158,6 +158,20 @@ Each scenario follows the same user-facing path:
 7. For `task smoke:docker-raft-placement-dind`, run `migrate`, `rebalance`, and `failover` with node failure simulation.
 8. For `task smoke:docker-raft-rollout`, apply the broken rollout manifest, expect watch failure, wait for auto rollback, and re-check ingress.
 
+## Full Stack Suite
+
+```powershell
+task smoke:docker-raft-stack-suite
+task smoke:docker-raft-stack-suite-full
+task smoke:docker-raft-stack-suite -CLI_ARGS "-SkipStackLifecycle"
+task smoke:docker-raft-stack-suite -CLI_ARGS "-TimeoutSeconds 450"
+```
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout
+```
+
 ## Direct Commands
 
 ```powershell

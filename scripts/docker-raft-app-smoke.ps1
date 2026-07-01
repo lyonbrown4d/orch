@@ -886,13 +886,13 @@ function Invoke-PlacementOperations {
 
     Write-Host ""
     Write-Host "Migrating $workloadName to $($migrateTarget.ID)..."
-    Invoke-Checked $cliBin @("--server", $leaderURL, "migrate", "app", $appName, "--to", $migrateTarget.ID, "--workload", $workloadName, "-n", $namespace)
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "migrate", $appName, "--to", $migrateTarget.ID, "--workload", $workloadName, "-n", $namespace)
     Wait-AssignmentRunningOn -LeaderNode $LeaderNode -WorkloadName $workloadName -ExpectedNodeID $migrateTarget.ID
     Wait-PlacementIngress
 
     Write-Host ""
     Write-Host "Rebalancing $workloadName back to preferred node $preferredNodeID..."
-    Invoke-Checked $cliBin @("--server", $leaderURL, "rebalance", "app", $appName, "--workload", $workloadName, "-n", $namespace)
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "rebalance", $appName, "--workload", $workloadName, "-n", $namespace)
     Wait-AssignmentRunningOn -LeaderNode $LeaderNode -WorkloadName $workloadName -ExpectedNodeID $preferredNodeID
     Wait-PlacementIngress
 
@@ -902,7 +902,7 @@ function Invoke-PlacementOperations {
         $leaderURL = Node-URL $currentLeader
         Write-Host ""
         Write-Host "Migrating $workloadName to non-leader victim $($victim.ID) before failure simulation..."
-        Invoke-Checked $cliBin @("--server", $leaderURL, "migrate", "app", $appName, "--to", $victim.ID, "--workload", $workloadName, "-n", $namespace)
+        Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "migrate", $appName, "--to", $victim.ID, "--workload", $workloadName, "-n", $namespace)
         Wait-AssignmentRunningOn -LeaderNode $currentLeader -WorkloadName $workloadName -ExpectedNodeID $victim.ID
         Wait-PlacementIngress
     }
@@ -917,7 +917,7 @@ function Invoke-PlacementOperations {
 
     Write-Host "Raft leader after node stop: $($leaderAfterStop.ID)"
     Write-Host "Failing over $workloadName from $($victim.ID) to $($survivor.ID)..."
-    Invoke-Checked $cliBin @("--server", $survivorURL, "failover", "app", $appName, "--to", $survivor.ID, "--workload", $workloadName, "-n", $namespace)
+    Invoke-Checked $cliBin @("--server", $survivorURL, "stack", "failover", $appName, "--to", $survivor.ID, "--workload", $workloadName, "-n", $namespace)
     Wait-AssignmentRunningOn -LeaderNode $survivor -WorkloadName $workloadName -ExpectedNodeID $survivor.ID
     $aliveNodes = @($nodes | Where-Object { $_.ID -ne $victim.ID })
     Wait-PlacementIngress -IngressNodes $aliveNodes
@@ -1296,4 +1296,5 @@ finally {
         }
     }
 }
+
 

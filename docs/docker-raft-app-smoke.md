@@ -71,11 +71,11 @@ After the deploy succeeds, the smoke exercises stack lifecycle:
 
 And then user-facing control-plane placement ops:
 
-- `migrate app placement-smoke --to <node> --workload whoami`
-- `rebalance app placement-smoke --workload whoami`
+- `stack migrate placement-smoke --to <node> --workload whoami`
+- `stack rebalance placement-smoke --workload whoami`
 - stop one non-leader orch-server container to simulate a worker/control-plane
   node outage
-- `failover app placement-smoke --to <survivor> --workload whoami`
+- `stack failover placement-smoke --to <survivor> --workload whoami`
 
 In `dind` mode, each node owns a separate Docker daemon. In this mode,
 each movement step waits for expected assignment and mounted volume binding, then checks
@@ -205,3 +205,4 @@ bindings to become `released`. In `dind` mode those named volumes are local to t
 assigned node's nested daemon, which is useful for lifecycle isolation checks but
 still does not validate cross-node shared storage, attach/detach orchestration,
 or data migration.
+

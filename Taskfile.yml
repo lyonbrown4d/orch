@@ -181,6 +181,44 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed -RuntimeIsolation dind {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:full-chain:
+    desc: "Run complete local docker deploy -> worker dispatch -> raft forwarding -> shared stack suite"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-docker-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-docker-worker-dispatch-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-raft-forwarding-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout -TimeoutSeconds {{.STACK_TIMEOUT}}
+    vars:
+      STACK_TIMEOUT: '{{default "300" .STACK_TIMEOUT}}'
+
+  smoke:full-chain-full:
+    desc: "Run complete local docker deploy -> worker dispatch -> raft forwarding -> full shared stack suite"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-docker-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-docker-worker-dispatch-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-raft-forwarding-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed -TimeoutSeconds {{.STACK_TIMEOUT}}
+    vars:
+      STACK_TIMEOUT: '{{default "300" .STACK_TIMEOUT}}'
+
+  smoke:full-chain-full-dind:
+    desc: "Run complete local docker deploy -> worker dispatch -> raft forwarding -> full DinD stack suite"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-docker-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-docker-worker-dispatch-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/local-raft-forwarding-smoke.ps1
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -RuntimeIsolation dind -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout -RuntimeIsolation dind -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud -RuntimeIsolation dind -TimeoutSeconds {{.STACK_TIMEOUT}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed -RuntimeIsolation dind -TimeoutSeconds {{.STACK_TIMEOUT}}
+    vars:
+      STACK_TIMEOUT: '{{default "300" .STACK_TIMEOUT}}'
+
   smoke:vagrant:
     desc: "Run a 3-node Vagrant smoke test (deploy -> status -> delete)"
     cmds:

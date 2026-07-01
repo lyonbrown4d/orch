@@ -1,0 +1,75 @@
+name: smoke-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_stack:
+        description: 'Run full 4-scenario stack chain (placement/rollout/nextcloud/seaweed)'
+        required: false
+        type: boolean
+        default: false
+      runtime_isolation:
+        description: 'Use per-node DinD runtime for stack scenarios'
+        required: false
+        type: boolean
+        default: false
+      timeout_seconds:
+        description: 'Per-scenario timeout for stack and raft/DNS checks'
+        required: false
+        default: '360'
+
+permissions:
+  contents: read
+
+jobs:
+  docker-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Single-node Docker smoke
+        shell: pwsh
+        run: ./scripts/local-docker-smoke.ps1
+
+      - name: Worker dispatch smoke
+        shell: pwsh
+        run: ./scripts/local-docker-worker-dispatch-smoke.ps1
+
+      - name: Raft forwarding smoke
+        shell: pwsh
+        run: ./scripts/local-raft-forwarding-smoke.ps1
+
+      - name: Docker Raft stack smoke chain
+        shell: pwsh
+        run: |
+          $fullSuite = '${{ github.event.inputs.full_stack }}' -eq 'true'
+          $runtimeIsolation = '${{ github.event.inputs.runtime_isolation }}' -eq 'true'
+          $timeout = 360
+          $rawTimeout = '${{ github.event.inputs.timeout_seconds }}'
+
+          if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
+            try {
+              $timeout = [int]$rawTimeout
+            }
+            catch {
+              Write-Host "Invalid timeout_seconds '$rawTimeout', using default 360"
+            }
+          }
+
+          $scenarios = @('placement', 'rollout')
+          if ($fullSuite) {
+            $scenarios = @('placement', 'rollout', 'nextcloud', 'seaweed')
+          }
+
+          foreach ($scenario in $scenarios) {
+            $args = @('-Scenario', $scenario, '-TimeoutSeconds', $timeout.ToString())
+            if ($runtimeIsolation) {
+              $args += @('-RuntimeIsolation', 'dind')
+            }
+            & './scripts/docker-raft-app-smoke.ps1' @args
+          }

@@ -103,6 +103,9 @@ task smoke:docker-raft-stack-suite
 task smoke:docker-raft-stack-suite-dind # placement/rebalance path
 task smoke:docker-raft-stack-suite-full-dind # optional dind runtime full-state scenarios
 task smoke:docker-raft-stack-suite-full # optional shared runtime full-state scenarios
+task smoke:full-chain # shared two-scenario stack chain
+task smoke:full-chain-full # full shared stack chain (placement/rollout/nextcloud/seaweed)
+task smoke:full-chain-full-dind # full DinD stack chain (placement/rollout/nextcloud/seaweed)
 task smoke:systemd-docker
 ```
 
@@ -115,6 +118,7 @@ The worker dispatch smoke starts separate scheduler and worker server processes 
 dispatch through the worker API. The Raft forwarding smoke starts a local three-node cluster and verifies apply/delete through a follower.
 The Docker Raft dind stack suites validate placement movement and full-state deployment chains with separate per-node Docker daemons.
 The Docker Raft stack suite validates three-node stack lifecycle and `stack` command behavior for `placement` and `rollout` scenarios.
+You can also trigger full-chain e2e workflow from GitHub Actions: `.github/workflows/smoke-e2e.yml`.
 The Docker systemd smoke installs the Linux package in a privileged Debian systemd
 container and verifies `orch-server.service` plus a small `systemd` workload.
 See `docs/local-docker-smoke.md`, `docs/local-podman-smoke.md`,

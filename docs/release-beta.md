@@ -61,6 +61,8 @@ task smoke:docker-raft-stack-suite
 task smoke:docker-raft-stack-suite-dind # validates per-node runtime movement (migrate/rebalance/failover path)
 task smoke:docker-raft-stack-suite-full-dind # optional dind runtime full-state scenarios
 task smoke:docker-raft-stack-suite-full  # optional stateful scenarios (nextcloud/seaweed)
+task smoke:full-chain-full-dind # optional full e2e DinD path
+task smoke:full-chain-full # optional full e2e shared path
 ```
 
 Run the package/systemd smoke on hosts that allow privileged Docker containers:

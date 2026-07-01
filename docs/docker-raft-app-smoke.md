@@ -67,6 +67,25 @@ the smoke exercises the user-facing operation chain:
 
 In `shared` mode, the placement smoke runs only the deploy/status/volume/ingress/delete chain. The user-facing movement chain is intentionally reserved for `-RuntimeIsolation dind`, where each node owns a separate Docker daemon. In DinD mode each step waits for the assignment and mounted volume binding to become `running`/`bound` on the expected node, then checks whoami through the live ingress ports. The stopped node also loses its nested Docker daemon, so the placement DinD smoke is the lightest starting point for real multi-node runtime validation.
 
+### Rollout Auto-Rollback
+
+```powershell
+task smoke:docker-raft-rollout
+```
+
+Deploy files:
+
+```text
+examples/integration/rollout.orch
+examples/integration/rollout-broken.orch
+```
+
+Deploys the same `traefik/whoami:v1.11` workload as a stable baseline, then
+applies a second manifest with an intentionally broken readiness path and
+`rollout.rollback_on_failure = true`. The smoke expects `orch apply --watch` to
+fail for the broken revision, waits for app status to return to the previous
+desired generation with rollback revisions recorded, and verifies ingress works
+again through all three nodes.
 ### Nextcloud
 
 ```powershell
@@ -124,12 +143,14 @@ Each scenario follows the same user-facing path:
 4. Assert expected workload assignments and runtime volume bindings.
 5. Request the application through ingress.
 6. For `task smoke:docker-raft-placement-dind`, run `migrate`, `rebalance`, stop one non-leader node, run `failover`, and re-check ingress after each movement step.
+7. For `task smoke:docker-raft-rollout`, apply the broken rollout manifest, expect watch failure, wait for auto rollback, and re-check ingress.
 
 ## Direct Commands
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -RuntimeIsolation dind
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario nextcloud
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed
 ```

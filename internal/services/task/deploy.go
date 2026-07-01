@@ -101,6 +101,9 @@ func (s *Service) deployOrderedWorkloads(ctx context.Context, app *deployv1.App,
 }
 
 func (s *Service) deployOneWorkload(ctx context.Context, app *deployv1.App, workload deployv1.Workload, self, generation string, opts deployOptions) error {
+	ctx, cancel := withRolloutProgressDeadline(ctx, workload)
+	defer cancel()
+
 	meta := app.Metadata
 	if assignment, ok := s.workloadAssignment(meta, workload.Name); ok {
 		handled, err := s.handleExistingAssignment(ctx, app, workload, assignment, generation, opts)
@@ -173,6 +176,7 @@ func (s *Service) recordDeployFailure(ctx context.Context, app *deployv1.App, wo
 	s.applyWorkloadVolumeBindings(ctx, app, workload, nodeID, volumemeta.BindingStatusFailed, generation, err.Error())
 	s.metrics.IncDeployWorkload(ctx, string(workload.Runtime), "failed")
 	s.metrics.IncDeployApp(ctx, "failed")
+	s.maybeAutoRollbackDeployFailure(ctx, app, workload, generation, err)
 }
 
 func (s *Service) skipStaleDeployFailure(meta deployv1.Metadata, workloadName, failedNodeID, generation string) bool {

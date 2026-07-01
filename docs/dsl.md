@@ -194,7 +194,14 @@ Workload
   - strategy
   - max_unavailable
   - max_surge
+  - rollback_on_failure
+  - progress_deadline
 ```
+
+In YAML, the current canonical fields are `rollout.rollbackOnFailure` and
+`rollout.progressDeadline`. `progressDeadline` uses Go duration syntax such as
+`30s` or `2m`; when `rollbackOnFailure` is true, a failed rollout restores the
+previous desired app revision if one exists.
 
 ### Model Boundaries
 

@@ -31,6 +31,9 @@ type AppView struct {
 	Pending            int
 	LastTransitionAt   time.Time
 	LastError          string
+	RevisionCount      int
+	RollbackAvailable  bool
+	PreviousGeneration string
 	Workloads          *list.List[AppWorkloadView]
 }
 
@@ -106,7 +109,22 @@ func (s *Service) buildAppView(app deployv1.App) AppView {
 	if view.allDesiredWorkloadsObserved() {
 		view.ObservedGeneration = generation
 	}
+	s.addAppRevisionSummary(&view)
 	return view
+}
+
+func (s *Service) addAppRevisionSummary(view *AppView) {
+	if s == nil || s.raft == nil || view == nil {
+		return
+	}
+	revisions := s.raft.ListDeployAppRevisions(view.Metadata)
+	view.RevisionCount = revisions.Len()
+	previous, ok := s.raft.GetPreviousDeployApp(view.Metadata)
+	if !ok {
+		return
+	}
+	view.RollbackAvailable = true
+	view.PreviousGeneration = strings.TrimSpace(previous.Generation)
 }
 
 func (view *AppView) addWorkload(item AppWorkloadView) {

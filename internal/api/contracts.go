@@ -154,6 +154,9 @@ type AppItem struct {
 	Pending            int       `json:"pending"`
 	LastTransitionAt   time.Time `json:"lastTransitionAt,omitzero"`
 	LastError          string    `json:"lastError,omitempty"`
+	RevisionCount      int       `json:"revisionCount"`
+	RollbackAvailable  bool      `json:"rollbackAvailable"`
+	PreviousGeneration string    `json:"previousGeneration,omitempty"`
 }
 
 type AppWorkloadItem struct {

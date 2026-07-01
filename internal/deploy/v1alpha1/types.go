@@ -225,9 +225,11 @@ type Scheduling struct {
 }
 
 type Rollout struct {
-	Strategy       string `json:"strategy,omitempty"       yaml:"strategy,omitempty"`
-	MaxUnavailable int    `json:"maxUnavailable,omitempty" yaml:"maxUnavailable,omitempty"`
-	MaxSurge       int    `json:"maxSurge,omitempty"       yaml:"maxSurge,omitempty"`
+	Strategy          string `json:"strategy,omitempty"          yaml:"strategy,omitempty"`
+	MaxUnavailable    int    `json:"maxUnavailable,omitempty"    yaml:"maxUnavailable,omitempty"`
+	MaxSurge          int    `json:"maxSurge,omitempty"          yaml:"maxSurge,omitempty"`
+	RollbackOnFailure bool   `json:"rollbackOnFailure,omitempty" yaml:"rollbackOnFailure,omitempty"`
+	ProgressDeadline  string `json:"progressDeadline,omitempty"  yaml:"progressDeadline,omitempty"`
 }
 
 const (

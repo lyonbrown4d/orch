@@ -183,7 +183,14 @@ Workload
   - strategy
   - max_unavailable
   - max_surge
+  - rollback_on_failure
+  - progress_deadline
 ```
+
+当前 YAML canonical 字段是 `rollout.rollbackOnFailure` 和
+`rollout.progressDeadline`。`progressDeadline` 使用 Go duration 写法，例如
+`30s` 或 `2m`；当 `rollbackOnFailure` 为 true 时，rollout 失败会在存在上一版
+revision 时恢复上一版 desired app。
 
 ### 模型边界
 

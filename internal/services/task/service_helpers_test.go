@@ -130,6 +130,21 @@ func workloadRollingRollout() workloadOption {
 	}
 }
 
+func workloadAutoRollbackRollout() workloadOption {
+	return func(workload *deployv1.Workload) {
+		workload.Rollout = &deployv1.Rollout{Strategy: "rolling", MaxUnavailable: 1, RollbackOnFailure: true}
+	}
+}
+
+func workloadProgressDeadline(deadline time.Duration) workloadOption {
+	return func(workload *deployv1.Workload) {
+		if workload.Rollout == nil {
+			workload.Rollout = &deployv1.Rollout{}
+		}
+		workload.Rollout.ProgressDeadline = deadline.String()
+	}
+}
+
 func deployApp(name string, workloads ...deployv1.Workload) *deployv1.App {
 	return &deployv1.App{
 		Metadata:  deployv1.Metadata{Name: name, Namespace: "default"},

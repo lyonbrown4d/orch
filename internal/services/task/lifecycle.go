@@ -72,6 +72,7 @@ func (s *Service) SubmitRollback(ctx context.Context, meta deployv1.Metadata) er
 	if !ok {
 		return oopsx.B("task").Errorf("deploy app %s/%s has no rollback revision", workloadmeta.NamespaceOrDefault(meta.Namespace), meta.Name)
 	}
+	s.suppressAutoRollback(meta, revision.Generation)
 	if err := s.SubmitDeploy(ctx, &revision.App); err != nil {
 		return oopsx.B("task").Wrapf(err, "rollback deploy app")
 	}

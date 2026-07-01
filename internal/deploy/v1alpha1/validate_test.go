@@ -139,6 +139,36 @@ func TestValidateRejectsNegativeResources(t *testing.T) {
 	}
 }
 
+func TestValidateRolloutProgressDeadline(t *testing.T) {
+	tests := []struct {
+		name     string
+		deadline string
+		want     string
+	}{
+		{name: "invalid", deadline: "soon", want: "rollout.progressDeadline is invalid"},
+		{name: "zero", deadline: "0s", want: "rollout.progressDeadline must be > 0"},
+		{name: "negative", deadline: "-1s", want: "rollout.progressDeadline must be > 0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := validApp()
+			app.Workloads[0].Rollout = &deployv1.Rollout{ProgressDeadline: tt.deadline}
+
+			err := app.Validate()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+
+	app := validApp()
+	app.Workloads[0].Rollout = &deployv1.Rollout{ProgressDeadline: "30s"}
+	if err := app.Validate(); err != nil {
+		t.Fatalf("Validate() with progress deadline = %v", err)
+	}
+}
+
 func TestValidateRejectsWorkloadDependencyCycle(t *testing.T) {
 	app := validApp()
 	app.Workloads = append(app.Workloads, deployv1.Workload{

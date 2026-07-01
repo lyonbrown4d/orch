@@ -107,10 +107,10 @@ func writeRuntimesHuman(items *list.List[api.RuntimeProviderItem]) error {
 func writeAppsHuman(items *list.List[api.AppItem]) error {
 	rows := list.NewGridWithCapacity[string](items.Len())
 	items.Range(func(_ int, app api.AppItem) bool {
-		rows.AddRow(app.Namespace, app.Name, statusBadge(app.Status), appReadyText(app.Running, app.DesiredWorkloads), nonEmpty(app.DesiredGeneration), nonEmpty(app.ObservedGeneration), appCountsText(app), formatTime(app.LastTransitionAt), nonEmpty(app.LastError))
+		rows.AddRow(app.Namespace, app.Name, statusBadge(app.Status), appReadyText(app.Running, app.DesiredWorkloads), nonEmpty(app.DesiredGeneration), nonEmpty(app.ObservedGeneration), strconv.Itoa(app.RevisionCount), boolText(app.RollbackAvailable), nonEmpty(app.PreviousGeneration), appCountsText(app), formatTime(app.LastTransitionAt), nonEmpty(app.LastError))
 		return true
 	})
-	return writeTable(list.NewList("NAMESPACE", "NAME", "STATUS", "READY", "GENERATION", "OBSERVED", "COUNTS", "UPDATED", "ERROR"), rows)
+	return writeTable(list.NewList("NAMESPACE", "NAME", "STATUS", "READY", "GENERATION", "OBSERVED", "REVISIONS", "ROLLBACK", "PREVIOUS", "COUNTS", "UPDATED", "ERROR"), rows)
 }
 
 func writeAppRevisionsHuman(items *list.List[api.AppRevisionItem]) error {
@@ -165,6 +165,9 @@ func writeAppDetailHuman(app *api.AppDetailItem) error {
 		[]string{"pending", strconv.Itoa(app.Pending)},
 		[]string{"last_transition", formatTime(app.LastTransitionAt)},
 		[]string{"last_error", nonEmpty(app.LastError)},
+		[]string{"revision_count", strconv.Itoa(app.RevisionCount)},
+		[]string{"rollback_available", strconv.FormatBool(app.RollbackAvailable)},
+		[]string{"previous_generation", nonEmpty(app.PreviousGeneration)},
 	)
 	if err := writeKVTable(rows); err != nil {
 		return err
@@ -186,6 +189,13 @@ func appReadyText(running, total int) string {
 
 func appCountsText(app api.AppItem) string {
 	return fmt.Sprintf("run=%d stop=%d fail=%d pending=%d", app.Running, app.Stopped, app.Failed, app.Pending)
+}
+
+func boolText(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }
 
 func writeRaftStatusHuman(out *api.RaftStatusOutput) error {

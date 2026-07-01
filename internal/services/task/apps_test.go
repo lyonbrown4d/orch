@@ -71,6 +71,19 @@ func TestListAppsTreatsMissingGenerationAsPending(t *testing.T) {
 	}
 }
 
+func TestListAppsIncludesRevisionSummary(t *testing.T) {
+	harness := newAppViewHarness()
+	appV1 := appViewDemo("demo", appViewDockerWorkload("api", "api:v1"))
+	appV2 := appViewDemo("demo", appViewDockerWorkload("api", "api:v2"))
+	harness.applyApp(t, appV1)
+	harness.applyApp(t, appV2)
+
+	view := harness.requireApp(t, appV2.Metadata)
+	if view.RevisionCount != 1 || !view.RollbackAvailable || view.PreviousGeneration != task.AppGeneration(appV1) {
+		t.Fatalf("revision summary = count:%d rollback:%t previous:%q want previous %q", view.RevisionCount, view.RollbackAvailable, view.PreviousGeneration, task.AppGeneration(appV1))
+	}
+}
+
 func appViewDemo(name string, workloads ...deployv1.Workload) deployv1.App {
 	return deployv1.App{
 		Metadata:  deployv1.Metadata{Name: name, Namespace: "default"},

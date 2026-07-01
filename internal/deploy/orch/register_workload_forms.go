@@ -19,6 +19,7 @@ func workloadFormSpecs() []schema.FormSpec {
 		resourcesFormSpec(),
 		healthFormSpec(),
 		lifecycleFormSpec(),
+		rolloutFormSpec(),
 		readinessFormSpec(),
 		livenessFormSpec(),
 		startupFormSpec(),
@@ -231,6 +232,21 @@ func lifecycleFormSpec() schema.FormSpec {
 	}
 }
 
+func rolloutFormSpec() schema.FormSpec {
+	return schema.FormSpec{
+		Name:      "rollout",
+		LabelKind: schema.LabelNone,
+		BodyMode:  schema.BodyFieldOnly,
+		Fields: schema.Fields(
+			schema.FieldSpec{Name: "strategy", Type: schema.TypeString},
+			schema.FieldSpec{Name: "max_unavailable", Type: schema.TypeInt},
+			schema.FieldSpec{Name: "max_surge", Type: schema.TypeInt},
+			schema.FieldSpec{Name: "rollback_on_failure", Type: schema.TypeBool, Default: false, HasDefault: true},
+			schema.FieldSpec{Name: "progress_deadline", Type: schema.TypeString},
+		),
+	}
+}
+
 func schedulingFormSpec() schema.FormSpec {
 	return schema.FormSpec{
 		Name:      "scheduling",
@@ -245,5 +261,5 @@ func schedulingFormSpec() schema.FormSpec {
 }
 
 func workloadNestedForms() *set.Set[string] {
-	return schema.NestedForms("run", "runtime_options", "docker", "containerd", "podman", "firecracker", "process", "systemd", "windows_service", "endpoint", "mount", "env", "resources", "health", "lifecycle", "scheduling")
+	return schema.NestedForms("run", "runtime_options", "docker", "containerd", "podman", "firecracker", "process", "systemd", "windows_service", "endpoint", "mount", "env", "resources", "health", "lifecycle", "rollout", "scheduling")
 }

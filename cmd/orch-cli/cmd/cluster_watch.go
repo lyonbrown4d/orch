@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/arcgolabs/collectionx/list"
@@ -41,6 +42,10 @@ func watchDeployment(ctx context.Context, c *apiclient.Client, app *deployv1.App
 		return nil, oopsx.B("cli").Errorf("--timeout must be greater than zero")
 	}
 	expectedKeys, expectedNames := expectedDeployWorkloads(app)
+	expectedGeneration := ""
+	if app != nil {
+		expectedGeneration = deployv1.AppGeneration(*app)
+	}
 	if expectedKeys.Len() == 0 {
 		return newDeploySnapshot(0), nil
 	}
@@ -49,39 +54,42 @@ func watchDeployment(ctx context.Context, c *apiclient.Client, app *deployv1.App
 	defer cancel()
 
 	spinner := startWatchSpinner(progress, expectedKeys.Len())
-	watcher := newDeployWatcher(c, expectedKeys, expectedNames, spinner)
+	watcher := newDeployWatcher(c, expectedKeys, expectedNames, expectedGeneration, spinner)
 
 	snapshot, err := backoff.Retry(waitCtx, watcher.poll(waitCtx), backoff.WithBackOff(backoff.NewConstantBackOff(500*time.Millisecond)))
 	return watcher.result(snapshot, err, timeout)
 }
 
 type deployWatcher struct {
-	client        *apiclient.Client
-	expectedKeys  *set.Set[string]
-	expectedNames *set.Set[string]
-	spinner       *pterm.SpinnerPrinter
-	last          *deploySnapshot
-	lastErr       error
-	permanentErr  error
+	client             *apiclient.Client
+	expectedKeys       *set.Set[string]
+	expectedNames      *set.Set[string]
+	expectedGeneration string
+	spinner            *pterm.SpinnerPrinter
+	last               *deploySnapshot
+	lastErr            error
+	permanentErr       error
 }
 
 func newDeployWatcher(
 	client *apiclient.Client,
 	expectedKeys *set.Set[string],
 	expectedNames *set.Set[string],
+	expectedGeneration string,
 	spinner *pterm.SpinnerPrinter,
 ) *deployWatcher {
 	return &deployWatcher{
-		client:        client,
-		expectedKeys:  expectedKeys,
-		expectedNames: expectedNames,
-		spinner:       spinner,
+		client:             client,
+		expectedKeys:       expectedKeys,
+		expectedNames:      expectedNames,
+		expectedGeneration: expectedGeneration,
+		spinner:            spinner,
 	}
 }
 
 func (w *deployWatcher) poll(ctx context.Context) func() (*deploySnapshot, error) {
 	return func() (*deploySnapshot, error) {
-		snapshot, err := readDeploySnapshot(ctx, w.client, w.expectedKeys, w.expectedNames)
+		snapshot, err := readDeploySnapshot(ctx, w.client, w.expectedKeys, w.expectedNames, w.expectedGeneration)
 		if err != nil {
 			w.lastErr = err
 			updateWatchSpinner(w.spinner, w.last, w.expectedKeys.Len(), err)
@@ -151,7 +159,7 @@ func expectedDeployWorkloads(app *deployv1.App) (*set.Set[string], *set.Set[stri
 	return keys, names
 }
 
-func readDeploySnapshot(ctx context.Context, c *apiclient.Client, expectedKeys, expectedNames *set.Set[string]) (*deploySnapshot, error) {
+func readDeploySnapshot(ctx context.Context, c *apiclient.Client, expectedKeys, expectedNames *set.Set[string], expectedGeneration string) (*deploySnapshot, error) {
 	assignments, err := c.ListAssignments(ctx)
 	if err != nil {
 		return nil, oopsx.B("cli").Wrapf(err, "list assignments")
@@ -162,26 +170,32 @@ func readDeploySnapshot(ctx context.Context, c *apiclient.Client, expectedKeys, 
 	}
 
 	snapshot := newDeploySnapshot(expectedKeys.Len())
-	collectAssignmentSnapshot(snapshot, assignments.Body.Items, expectedKeys)
+	collectAssignmentSnapshot(snapshot, assignments.Body.Items, expectedKeys, expectedGeneration)
 	collectWorkloadSnapshot(snapshot, workloads.Body.Items, expectedNames)
 	return snapshot, nil
 }
 
-func collectAssignmentSnapshot(snapshot *deploySnapshot, items *list.List[api.AssignmentItem], expectedKeys *set.Set[string]) {
+func collectAssignmentSnapshot(snapshot *deploySnapshot, items *list.List[api.AssignmentItem], expectedKeys *set.Set[string], expectedGeneration string) {
 	items.Range(func(_ int, assignment api.AssignmentItem) bool {
 		if !expectedKeys.Contains(assignment.Key) {
 			return true
 		}
 		snapshot.Assignments.Add(assignment)
-		if assignment.Status == workloadmeta.AssignmentStatusRunning {
+		matchesGeneration := assignmentMatchesExpectedGeneration(assignment, expectedGeneration)
+		if matchesGeneration && assignment.Status == workloadmeta.AssignmentStatusRunning {
 			snapshot.RunningAssignments++
 		}
-		if assignment.Status == workloadmeta.AssignmentStatusFailed && snapshot.FailedAssignment == nil {
+		if matchesGeneration && assignment.Status == workloadmeta.AssignmentStatusFailed && snapshot.FailedAssignment == nil {
 			failed := assignment
 			snapshot.FailedAssignment = &failed
 		}
 		return true
 	})
+}
+
+func assignmentMatchesExpectedGeneration(assignment api.AssignmentItem, expectedGeneration string) bool {
+	expectedGeneration = strings.TrimSpace(expectedGeneration)
+	return expectedGeneration == "" || strings.TrimSpace(assignment.Generation) == expectedGeneration
 }
 
 func collectWorkloadSnapshot(snapshot *deploySnapshot, items *list.List[api.WorkloadItem], expectedNames *set.Set[string]) {

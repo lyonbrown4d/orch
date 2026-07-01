@@ -284,5 +284,15 @@ func (w *Workload) validateRollout() error {
 	if w.Rollout.MaxSurge < 0 {
 		return oopsx.B("deploy").Errorf("rollout.maxSurge must be >= 0")
 	}
+	if strings.TrimSpace(w.Rollout.ProgressDeadline) == "" {
+		return nil
+	}
+	deadline, err := w.Rollout.ProgressDeadlineDuration()
+	if err != nil {
+		return oopsx.B("deploy").Wrapf(err, "rollout.progressDeadline is invalid")
+	}
+	if deadline <= 0 {
+		return oopsx.B("deploy").Errorf("rollout.progressDeadline must be > 0")
+	}
 	return nil
 }

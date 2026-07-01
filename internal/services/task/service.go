@@ -45,20 +45,26 @@ type Service struct {
 
 	restartMu       sync.Mutex
 	restartAttempts map[string]int
+
+	autoRollbackMu         sync.Mutex
+	autoRollbackAttempts   map[string]struct{}
+	autoRollbackSuppressed map[string]struct{}
 }
 
 func NewService(logger *slog.Logger, metricService *metrics.Service, runtimeManager *runtime.Manager, registryService *registry.Service, cfg config.Config, bundle Bundle) *Service {
 	return &Service{
-		logger:     logger,
-		cfg:        cfg,
-		metrics:    metricService,
-		runtime:    runtimeManager,
-		registry:   registryService,
-		catalog:    bundle.Catalog,
-		placement:  bundle.Placement,
-		local:      bundle.LocalNode,
-		raft:       bundle.Raft,
-		dispatcher: bundle.Dispatcher,
-		dns:        bundle.DNS,
+		logger:                 logger,
+		cfg:                    cfg,
+		metrics:                metricService,
+		runtime:                runtimeManager,
+		registry:               registryService,
+		catalog:                bundle.Catalog,
+		placement:              bundle.Placement,
+		local:                  bundle.LocalNode,
+		raft:                   bundle.Raft,
+		dispatcher:             bundle.Dispatcher,
+		dns:                    bundle.DNS,
+		autoRollbackAttempts:   map[string]struct{}{},
+		autoRollbackSuppressed: map[string]struct{}{},
 	}
 }

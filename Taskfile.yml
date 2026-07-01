@@ -127,6 +127,12 @@ tasks:
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
 
+  smoke:docker-raft-rollout:
+    desc: "Run a Docker 3-node Raft rollout auto-rollback smoke with whoami"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
   smoke:docker-raft-nextcloud:
     desc: "Run a Docker 3-node Raft cluster smoke with Nextcloud, Postgres, and Redis"
     cmds:
@@ -215,3 +221,4 @@ tasks:
     cmds:
       - task release-gate:static
       - task smoke:local-container-runtimes
+

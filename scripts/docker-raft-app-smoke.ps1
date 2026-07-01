@@ -1,8 +1,9 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("placement", "nextcloud", "seaweed")]
+    [ValidateSet("placement", "rollout", "nextcloud", "seaweed")]
     [string]$Scenario = "nextcloud",
     [string]$Manifest = "",
+    [string]$BadManifest = "",
     [string]$ImageTag = "",
     [string]$NetworkName = "",
     [string]$NetworkSubnet = "",
@@ -39,6 +40,22 @@ function New-ScenarioConfig {
                 Workloads = @("whoami")
                 WorkloadNodes = @{ whoami = "node-b" }
                 WorkloadVolumes = @{ whoami = @("whoamiData") }
+                DescribeWorkload = "whoami"
+            }
+        }
+        "rollout" {
+            return [pscustomobject]@{
+                Slug = "rollout"
+                AppName = "rollout-smoke"
+                DefaultSubnet = "172.31.243.0/24"
+                DefaultNetwork = "orch-raft-rollout-smoke"
+                DefaultManifest = "examples/integration/rollout.orch"
+                RolloutBadManifest = "examples/integration/rollout-broken.orch"
+                APIBase = 18501
+                IngressBase = 18480
+                Workloads = @("whoami")
+                WorkloadNodes = @{ whoami = "node-b" }
+                WorkloadVolumes = @{}
                 DescribeWorkload = "whoami"
             }
         }
@@ -97,6 +114,7 @@ function Get-SubnetPrefix {
 }
 
 $scenarioCfg = New-ScenarioConfig -Name $Scenario
+$badManifestOverridden = $PSBoundParameters.ContainsKey("BadManifest")
 if ([string]::IsNullOrWhiteSpace($ImageTag)) {
     $ImageTag = "orch-docker-raft-$($scenarioCfg.Slug):local"
 }
@@ -107,6 +125,9 @@ if ([string]::IsNullOrWhiteSpace($NetworkName)) {
 if ($networkOverridden -and -not $PSBoundParameters.ContainsKey("Manifest")) {
     throw "Custom -NetworkName requires a matching -Manifest because integration .orch files pin docker.network."
 }
+if ($networkOverridden -and $scenarioCfg.Slug -eq "rollout" -and -not $badManifestOverridden) {
+    throw "Custom -NetworkName in rollout scenario requires -BadManifest with the same docker.network."
+}
 if ([string]::IsNullOrWhiteSpace($NetworkSubnet)) {
     $NetworkSubnet = $scenarioCfg.DefaultSubnet
 }
@@ -116,7 +137,17 @@ if ([string]::IsNullOrWhiteSpace($WorkDir)) {
 if ([string]::IsNullOrWhiteSpace($Manifest)) {
     $Manifest = $scenarioCfg.DefaultManifest
 }
+if ([string]::IsNullOrWhiteSpace($BadManifest)) {
+    $badProp = $scenarioCfg.PSObject.Properties["RolloutBadManifest"]
+    if ($null -ne $badProp) {
+        $BadManifest = [string]$badProp.Value
+    }
+}
 $manifestPath = (Resolve-Path (Join-Path $repoRoot $Manifest)).Path
+$rolloutBadManifestPath = ""
+if (-not [string]::IsNullOrWhiteSpace($BadManifest)) {
+    $rolloutBadManifestPath = (Resolve-Path (Join-Path $repoRoot $BadManifest)).Path
+}
 
 $networkPrefix = Get-SubnetPrefix -Subnet $NetworkSubnet
 $nodes = @(
@@ -134,7 +165,7 @@ $targetNodeID = "node-b"
 $targetNode = $nodes | Where-Object { $_.ID -eq $targetNodeID } | Select-Object -First 1
 $appName = [string]$scenarioCfg.AppName
 $workloadNames = @($scenarioCfg.Workloads)
-$containerNames = $workloadNames | ForEach-Object { "orch-$namespace-$_" }
+$containerNames = $workloadNames | ForEach-Object { "orch-$namespace-$appName-$_" }
 $workRoot = Join-Path $repoRoot $WorkDir
 $hostBinDir = Join-Path $workRoot "bin"
 $linuxBinDir = Join-Path $workRoot "linux-bin"
@@ -719,6 +750,7 @@ function Wait-SeaweedRoundTrip {
 function Wait-ScenarioIngress {
     switch ($scenarioCfg.Slug) {
         "placement" { Wait-PlacementIngress }
+        "rollout" { Wait-PlacementIngress }
         "nextcloud" {
             foreach ($node in $nodes) {
                 Wait-NextcloudIngress -IngressNode $node
@@ -727,6 +759,68 @@ function Wait-ScenarioIngress {
         "seaweed" { Wait-SeaweedRoundTrip }
         default { throw "Unsupported scenario: $($scenarioCfg.Slug)" }
     }
+}
+
+function Get-AppStatus {
+    param([Parameter(Mandatory = $true)]$LeaderNode)
+    return (Invoke-CLIJson -ServerURL (Node-URL $LeaderNode) -Arguments @("stack", "status", $appName, "-n", $namespace, "--json"))[0]
+}
+
+function Wait-RolloutAutoRollback {
+    param(
+        [Parameter(Mandatory = $true)]$LeaderNode,
+        [Parameter(Mandatory = $true)][string]$ExpectedGeneration
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $status = Get-AppStatus -LeaderNode $LeaderNode
+        $desired = [string](Get-JSONProperty -Object $status -Name "desiredGeneration" -Default "")
+        $state = [string](Get-JSONProperty -Object $status -Name "status" -Default "")
+        $rollbackAvailable = [bool](Get-JSONProperty -Object $status -Name "rollbackAvailable" -Default $false)
+        $previous = [string](Get-JSONProperty -Object $status -Name "previousGeneration" -Default "")
+        $revisionCount = [int](Get-JSONProperty -Object $status -Name "revisionCount" -Default 0)
+        if ($state -eq "running" -and $desired -eq $ExpectedGeneration -and $rollbackAvailable -and $revisionCount -ge 1 -and $previous -ne "") {
+            Write-Host "Auto rollback restored desired generation $desired; previous generation is $previous."
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for rollout auto rollback to restore generation $ExpectedGeneration"
+}
+
+function Invoke-RolloutOperations {
+    param([Parameter(Mandatory = $true)]$LeaderNode)
+    if ($scenarioCfg.Slug -ne "rollout") {
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace($rolloutBadManifestPath)) {
+        throw "Rollout scenario requires -BadManifest"
+    }
+
+    $leaderURL = Node-URL $LeaderNode
+    $before = Get-AppStatus -LeaderNode $LeaderNode
+    $stableGeneration = [string](Get-JSONProperty -Object $before -Name "desiredGeneration" -Default "")
+    if ($stableGeneration -eq "") {
+        throw "Rollout scenario could not read stable desired generation before failure"
+    }
+
+    Write-Host ""
+    Write-Host "Applying intentionally failing rollout manifest..."
+    $failedAsExpected = $false
+    try {
+        Invoke-Checked $cliBin @("--server", $leaderURL, "apply", "--file", $rolloutBadManifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
+    }
+    catch {
+        $failedAsExpected = $true
+        Write-Host "Failing rollout was rejected by watch as expected: $_"
+    }
+    if (-not $failedAsExpected) {
+        throw "Broken rollout unexpectedly succeeded"
+    }
+
+    Wait-RolloutAutoRollback -LeaderNode $LeaderNode -ExpectedGeneration $stableGeneration
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "history", $appName, "-n", $namespace)
+    Wait-PlacementIngress
 }
 
 function Invoke-PlacementOperations {
@@ -1099,6 +1193,7 @@ try {
     Wait-AssignmentsRunning -LeaderNode $leader
     Write-Host "Checking ingress routing for $($scenarioCfg.Slug)..."
     Wait-ScenarioIngress
+    Invoke-RolloutOperations -LeaderNode $leader
     Invoke-PlacementOperations -LeaderNode $leader
 
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "apps")
@@ -1152,3 +1247,6 @@ finally {
         }
     }
 }
+
+
+

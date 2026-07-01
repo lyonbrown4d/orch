@@ -79,6 +79,9 @@ func appItem(app task.AppView) AppItem {
 		Pending:            app.Pending,
 		LastTransitionAt:   app.LastTransitionAt,
 		LastError:          app.LastError,
+		RevisionCount:      app.RevisionCount,
+		RollbackAvailable:  app.RollbackAvailable,
+		PreviousGeneration: app.PreviousGeneration,
 	}
 }
 

@@ -1,0 +1,42 @@
+// Integration smoke: rollout auto-rollback failure revision.
+// Same image, intentionally broken readiness port, same app identity.
+
+app {
+  name = "rollout-smoke"
+  namespace = "default"
+
+  docker {
+    network = "orch-raft-rollout-smoke"
+  }
+
+  service whoami {
+    image = "traefik/whoami:v1.11"
+    preferred_nodes = ["node-b"]
+
+    http(80)
+    health {
+      readiness {
+        http = "/"
+        port = 65535
+        interval = "1s"
+        timeout = "500ms"
+        retries = 60
+      }
+    }
+
+    rollout {
+      strategy = "rolling"
+      max_unavailable = 1
+      rollback_on_failure = true
+      progress_deadline = "10s"
+    }
+  }
+
+  ingress public {
+    path "/" {
+      workload = whoami
+    }
+  }
+}
+
+

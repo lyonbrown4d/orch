@@ -109,6 +109,8 @@ task smoke:full-chain-full-dind # full DinD stack chain (placement/rollout/nextc
 task smoke:systemd-docker
 ```
 
+The manual release-gate path is `.github/workflows/release-gate.yml`, where `include_e2e` can be set to true to run full-chain checks.
+
 This starts a single-node server and deploys either
 `examples/local-docker-smoke.yaml` or `examples/local-podman-smoke.yaml`,
 checks workload status with the CLI, runs stop/start/restart/delete, and cleans

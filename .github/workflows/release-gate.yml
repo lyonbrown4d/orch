@@ -1,0 +1,34 @@
+name: release-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_e2e:
+        description: 'Run extended full-chain e2e smoke after baseline release-gate checks'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run baseline release gate
+        shell: pwsh
+        run: task release-gate
+
+      - name: Run optional full e2e gate
+        if: github.event.inputs.include_e2e == 'true'
+        shell: pwsh
+        run: task release-gate:e2e

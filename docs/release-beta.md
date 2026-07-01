@@ -94,6 +94,17 @@ smoke. `release-gate` adds runtime smoke coverage. `release-gate:e2e` runs the
 extended full-chain smoke and keeps logs in the GitHub Actions artifact for CI runs.
 `smoke:systemd-docker` is kept separate because it requires privileged Docker and systemd-in-container support.
 
+
+### Manual Gate Workflow
+
+You can also run the manual full-chain gate from GitHub Actions via `workflow_dispatch` on `.github/workflows/release-gate.yml`.
+
+```yaml
+include_e2e: true
+```
+
+This workflow runs `task release-gate`, and when `include_e2e` is true it additionally runs `task release-gate:e2e`.
+
 ## Tagging
 
 Use prerelease semver tags:

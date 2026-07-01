@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: false
+      include_e2e_dind:
+        description: 'Run full e2e using DinD stack paths for migrate/rebalance/failover coverage'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,6 +50,12 @@ jobs:
           }
           if ('${{ github.event.inputs.include_e2e }}' -eq 'true') {
             $cliArgs += '-E2E'
+          }
+          if ('${{ github.event.inputs.include_e2e_dind }}' -eq 'true') {
+            if (-not ($cliArgs -contains '-E2E')) {
+              $cliArgs += '-E2E'
+            }
+            $cliArgs += '-E2EDind'
           }
 
           if ($cliArgs.Count -eq 0) {

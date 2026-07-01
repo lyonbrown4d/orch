@@ -102,6 +102,7 @@ To run the same staged checks locally:
 task release-gate:static
 task release-gate:local CLI_ARGS="-Runtime"
 task release-gate:local CLI_ARGS="-Runtime -E2E"
+task release-gate:local CLI_ARGS="-Runtime -E2E -E2EDind"
 ```
 
 ### Manual Gate Workflow
@@ -110,6 +111,7 @@ You can run the manual release gate workflow through `workflow_dispatch` on `.gi
 
 `include_runtime` enables container runtime checks.
 `include_e2e` enables the extended full-chain e2e gate.
+`include_e2e_dind` enables the DinD full-chain path for placement/migrate/rebalance/failover coverage.
 
 Workflow input examples:
 
@@ -117,18 +119,27 @@ Workflow input examples:
 # Baseline only (same as task release-gate:static)
 include_runtime: false
 include_e2e: false
+include_e2e_dind: false
 ```
 
 ```yaml
 # Runtime smoke checks
 include_runtime: true
 include_e2e: false
+include_e2e_dind: false
 ```
 
 ```yaml
 # Full e2e (runtime + e2e) in one pass
 include_runtime: true
 include_e2e: true
+include_e2e_dind: false
+```
+```yaml
+# Full e2e with DinD movement path
+include_runtime: true
+include_e2e: true
+include_e2e_dind: true
 ```
 
 Execution mapping:
@@ -137,10 +148,12 @@ Execution mapping:
 include_runtime=false, include_e2e=false => task release-gate:local
 include_runtime=true,  include_e2e=false => task release-gate:local CLI_ARGS="-Runtime"
 include_runtime=true,  include_e2e=true  => task release-gate:local CLI_ARGS="-Runtime -E2E"
+include_runtime=true,  include_e2e=true, include_e2e_dind=true  => task release-gate:local CLI_ARGS="-Runtime -E2E -E2EDind"
 include_runtime=false, include_e2e=true => task release-gate:local CLI_ARGS="-E2E"
+include_runtime=false, include_e2e=true, include_e2e_dind=true => task release-gate:local CLI_ARGS="-E2E -E2EDind"
 ```
 
-When `include_runtime` is enabled, the workflow runs `task smoke:local-container-runtimes` after `task release-gate:static` and before optional `release-gate:e2e`.
+When `include_runtime` is enabled, the workflow runs `task smoke:local-container-runtimes` after `task release-gate:static` and before optional `release-gate:e2e` (or DinD when `include_e2e_dind` is true).
 
 ## Tagging
 

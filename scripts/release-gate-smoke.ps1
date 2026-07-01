@@ -2,6 +2,7 @@
 param(
     [switch]$Runtime,
     [switch]$E2E,
+    [switch]$E2EDind,
     [switch]$SkipBaseline
 )
 
@@ -23,7 +24,12 @@ if ($Runtime) {
 
 if ($E2E) {
     Write-Host "[release-gate] Running full-chain e2e gate..."
-    task release-gate:e2e
+    if ($E2EDind) {
+        task smoke:full-chain-full-dind
+    }
+    else {
+        task release-gate:e2e
+    }
 }
 
 Write-Host "[release-gate] Completed."

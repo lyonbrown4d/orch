@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lyonbrown4d/orch/cmd/orch-cli/cliapp"
+	"github.com/lyonbrown4d/orch/internal/api"
 	"github.com/lyonbrown4d/orch/internal/apiclient"
 	"github.com/lyonbrown4d/orch/internal/deploy/loader"
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
@@ -32,6 +33,9 @@ func newStackCmd() *cobra.Command {
 	cmd.AddCommand(newStackOperationCmd("start NAME", "Start a stopped stack", "start", startAppStatus))
 	cmd.AddCommand(newStackOperationCmd("stop NAME", "Stop a stack", "stop", stopAppStatus))
 	cmd.AddCommand(newStackOperationCmd("restart NAME", "Restart a stack", "restart", restartAppStatus))
+	cmd.AddCommand(newStackMigrateCmd())
+	cmd.AddCommand(newStackFailoverCmd())
+	cmd.AddCommand(newStackRebalanceCmd())
 	return cmd
 }
 
@@ -168,6 +172,74 @@ func newStackOperationCmd(use, short, label string, action appStatusAction) *cob
 	return cmd
 }
 
+func newStackMigrateCmd() *cobra.Command {
+	var namespace string
+	var jsonOut bool
+	var workloads []string
+	var targetNode string
+	cmd := &cobra.Command{
+		Use:   "migrate NAME --to NODE",
+		Short: "Move stack workloads to a target node",
+		Long:  "Moves selected workloads in the named stack to --to. Stops them on current workers and starts on the target assignment. Desired stack doc is retained.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackDeployOperationCommand(contextFromCmd(cmd), namespace, args[0], "migrate", targetNode, workloads, jsonOut, func(ctx context.Context, c *apiclient.Client, namespace, name, target string, workloads []string) (*api.DeployOperationOutput, error) {
+				return c.MigrateDeploy(ctx, namespace, name, target, workloads)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&targetNode, "to", "", "Target node ID")
+	cmd.Flags().StringArrayVar(&workloads, "workload", nil, "Workload name to migrate (repeatable; default all workloads)")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Stack namespace")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
+	mustMarkFlagRequired(cmd, "to")
+	return cmd
+}
+
+func newStackFailoverCmd() *cobra.Command {
+	var namespace string
+	var jsonOut bool
+	var workloads []string
+	var targetNode string
+	cmd := &cobra.Command{
+		Use:   "failover NAME",
+		Short: "Move failed stack workloads to another node",
+		Long:  "Moves selected failed workloads to another node, defaulting to a healthy available node when --to is omitted.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackDeployOperationCommand(contextFromCmd(cmd), namespace, args[0], "failover", targetNode, workloads, jsonOut, func(ctx context.Context, c *apiclient.Client, namespace, name, target string, workloads []string) (*api.DeployOperationOutput, error) {
+				return c.FailoverDeploy(ctx, namespace, name, target, workloads)
+			})
+		},
+	}
+	cmd.Flags().StringVar(&targetNode, "to", "", "Optional target node ID")
+	cmd.Flags().StringArrayVar(&workloads, "workload", nil, "Workload name to failover (repeatable; default all failed workloads)")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Stack namespace")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
+	return cmd
+}
+
+func newStackRebalanceCmd() *cobra.Command {
+	var namespace string
+	var jsonOut bool
+	var workloads []string
+	cmd := &cobra.Command{
+		Use:   "rebalance NAME",
+		Short: "Re-run placement for stack workloads",
+		Long:  "Re-runs placement and migrates selected workloads when their target node changes.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackDeployOperationCommand(contextFromCmd(cmd), namespace, args[0], "rebalance", "", workloads, jsonOut, func(ctx context.Context, c *apiclient.Client, namespace, name, _ string, workloads []string) (*api.DeployOperationOutput, error) {
+				return c.RebalanceDeploy(ctx, namespace, name, workloads)
+			})
+		},
+	}
+	cmd.Flags().StringArrayVar(&workloads, "workload", nil, "Workload name to rebalance (repeatable; default all workloads)")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Stack namespace")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Print JSON")
+	return cmd
+}
+
 func runStackOperationCommand(ctx context.Context, namespace, name, label string, jsonOut bool, action appStatusAction) error {
 	conn := cliapp.ConnFromGlobals(serverURL, authToken)
 	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
@@ -185,6 +257,33 @@ func runStackOperationCommand(ctx context.Context, namespace, name, label string
 			viewField("stack", body.App),
 			viewField("namespace", body.Namespace),
 		)
+	}); err != nil {
+		return oopsx.B("cli").Wrapf(err, "%s stack command", label)
+	}
+	return nil
+}
+
+type stackDeployOperationAction func(context.Context, *apiclient.Client, string, string, string, []string) (*api.DeployOperationOutput, error)
+
+func runStackDeployOperationCommand(
+	ctx context.Context,
+	namespace, name, label, targetNode string,
+	workloads []string,
+	jsonOut bool,
+	action stackDeployOperationAction,
+) error {
+	conn := cliapp.ConnFromGlobals(serverURL, authToken)
+	if err := cliapp.RunCluster(ctx, conn, func(ctx context.Context, c *apiclient.Client, _ *loader.Loader) error {
+		out, err := action(ctx, c, namespace, name, targetNode, workloads)
+		if err != nil {
+			return oopsx.B("cli").Wrapf(err, "%s stack", label)
+		}
+		if jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(out.Body)
+		}
+		return writeDeployOperationHuman(label, out)
 	}); err != nil {
 		return oopsx.B("cli").Wrapf(err, "%s stack command", label)
 	}

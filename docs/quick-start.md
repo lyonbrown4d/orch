@@ -52,6 +52,16 @@ go run ./cmd/orch-cli delete app my-app -n default
 go run ./cmd/orch-cli migrate app my-app --to node-b -n default
 go run ./cmd/orch-cli failover app my-app -n default
 go run ./cmd/orch-cli rebalance app my-app -n default
+
+# same stack-level operations
+
+go run ./cmd/orch-cli stack stop my-stack -n default
+go run ./cmd/orch-cli stack start my-stack -n default
+go run ./cmd/orch-cli stack restart my-stack -n default
+go run ./cmd/orch-cli stack delete my-stack -n default
+go run ./cmd/orch-cli stack migrate my-stack --to node-b -n default
+go run ./cmd/orch-cli stack failover my-stack -n default
+go run ./cmd/orch-cli stack rebalance my-stack -n default
 ```
 
 `stop` stops assigned workloads through the local runtime or worker dispatch and
@@ -60,6 +70,9 @@ the app again, `restart` does stop then start, and `delete` stops workloads firs
 then removes desired state from Raft. `migrate` moves selected workloads to a
 target node, `failover` moves failed workloads (or explicitly selected
 workloads), and `rebalance` re-runs placement and moves only changed placements.
+
+For stack resources, the same operational model applies and returns the same status
+shapes with `stack`-scoped output labels.
 
 ## Host DNS installer hook
 

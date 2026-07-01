@@ -295,6 +295,13 @@ tasks:
     cmds:
       - task smoke:full-chain-full
 
+  release-gate:local:
+    desc: "Run beta release gate checks with optional runtime/e2e toggles"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release-gate-smoke.ps1 {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
   release-gate:
     desc: "Run full beta release gate checks, including local container-runtime smoke tests"
     cmds:

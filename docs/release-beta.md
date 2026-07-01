@@ -95,6 +95,15 @@ extended full-chain smoke and keeps logs in the GitHub Actions artifact for CI r
 `smoke:systemd-docker` is kept separate because it requires privileged Docker and systemd-in-container support.
 
 
+
+To run the same staged checks locally:
+
+```bash
+task release-gate:static
+task release-gate:local CLI_ARGS="-Runtime"
+task release-gate:local CLI_ARGS="-Runtime -E2E"
+```
+
 ### Manual Gate Workflow
 
 You can run the manual release gate workflow through `workflow_dispatch` on `.github/workflows/release-gate.yml` with optional toggles:

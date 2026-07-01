@@ -97,13 +97,23 @@ extended full-chain smoke and keeps logs in the GitHub Actions artifact for CI r
 
 ### Manual Gate Workflow
 
-You can also run the manual full-chain gate from GitHub Actions via `workflow_dispatch` on `.github/workflows/release-gate.yml`.
+You can run the manual release gate workflow through `workflow_dispatch` on `.github/workflows/release-gate.yml` with optional toggles:
+
+`include_runtime` (enable container runtime checks)
+`include_e2e` (enable extended full-chain checks)
+
+Defaults: both off.
+
+Suggested patterns:
 
 ```yaml
+include_runtime: true
 include_e2e: true
 ```
 
-This workflow runs `task release-gate`, and when `include_e2e` is true it additionally runs `task release-gate:e2e`.
+When `include_runtime` is enabled, the workflow runs `task smoke:local-container-runtimes` after `task release-gate:static` and before optional `release-gate:e2e`.
+
+
 
 ## Tagging
 

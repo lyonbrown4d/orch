@@ -3,8 +3,13 @@ name: release-gate
 on:
   workflow_dispatch:
     inputs:
+      include_runtime:
+        description: 'Run container runtime smokes in addition to raft-only checks'
+        required: false
+        type: boolean
+        default: false
       include_e2e:
-        description: 'Run extended full-chain e2e smoke after baseline release-gate checks'
+        description: 'Run extended full-chain e2e smoke after baseline and runtime checks'
         required: false
         type: boolean
         default: false
@@ -15,7 +20,7 @@ permissions:
 jobs:
   release-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -24,9 +29,20 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install podman for runtime smoke path
+        if: github.event.inputs.include_runtime == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
       - name: Run baseline release gate
         shell: pwsh
-        run: task release-gate
+        run: task release-gate:static
+
+      - name: Run runtime smokes
+        if: github.event.inputs.include_runtime == 'true'
+        shell: pwsh
+        run: task smoke:local-container-runtimes
 
       - name: Run optional full e2e gate
         if: github.event.inputs.include_e2e == 'true'

@@ -146,7 +146,6 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
-
   smoke:docker-raft-stack-suite:
     desc: "Run stacked Docker Raft stack app suite: placement and rollout"
     cmds:
@@ -164,6 +163,15 @@ tasks:
       - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario seaweed {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
+  smoke:docker-raft-stack-suite-dind:
+    desc: "Run Docker Raft dind stack suite: placement movement and rollout"
+    cmds:
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario placement -RuntimeIsolation dind {{.CLI_ARGS}}
+      - pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/docker-raft-app-smoke.ps1 -Scenario rollout -RuntimeIsolation dind {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "" .CLI_ARGS}}'
+
   smoke:vagrant:
     desc: "Run a 3-node Vagrant smoke test (deploy -> status -> delete)"
     cmds:

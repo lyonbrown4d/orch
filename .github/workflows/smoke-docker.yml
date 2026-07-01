@@ -2,6 +2,12 @@ name: smoke-docker
 
 on:
   workflow_dispatch:
+    inputs:
+      full_suite:
+        description: 'Run full 4-scenario Docker Raft stack suite (placement/rollout/nextcloud/seaweed)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,4 +43,9 @@ jobs:
 
       - name: Docker 3-node Raft stack smoke suite
         shell: pwsh
-        run: task smoke:docker-raft-stack-suite -CLI_ARGS "-TimeoutSeconds 300"
+        run: |
+          if ('${{ github.event.inputs.full_suite }}' -eq 'true') {
+            task smoke:docker-raft-stack-suite-full -CLI_ARGS "-TimeoutSeconds 360"
+          } else {
+            task smoke:docker-raft-stack-suite -CLI_ARGS "-TimeoutSeconds 300"
+          }

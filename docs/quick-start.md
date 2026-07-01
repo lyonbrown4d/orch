@@ -119,6 +119,7 @@ dispatch through the worker API. The Raft forwarding smoke starts a local three-
 The Docker Raft dind stack suites validate placement movement and full-state deployment chains with separate per-node Docker daemons.
 The Docker Raft stack suite validates three-node stack lifecycle and `stack` command behavior for `placement` and `rollout` scenarios.
 You can also trigger full-chain e2e workflow from GitHub Actions: `.github/workflows/smoke-e2e.yml`.
+The workflow uploads logs to the `smoke-e2e-logs-<run-id>` artifact.
 The Docker systemd smoke installs the Linux package in a privileged Debian systemd
 container and verifies `orch-server.service` plus a small `systemd` workload.
 See `docs/local-docker-smoke.md`, `docs/local-podman-smoke.md`,

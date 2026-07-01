@@ -86,12 +86,13 @@ The Taskfile exposes the same checks as:
 ```bash
 task release-gate:static
 task release-gate
+task release-gate:e2e
 ```
 
 `release-gate:static` runs the non-runtime checks plus the local Raft forwarding
-smoke. `release-gate` adds runtime smoke coverage. `smoke:systemd-docker` is
-kept separate because it requires privileged Docker and systemd-in-container
-support.
+smoke. `release-gate` adds runtime smoke coverage. `release-gate:e2e` runs the
+extended full-chain smoke and keeps logs in the GitHub Actions artifact for CI runs.
+`smoke:systemd-docker` is kept separate because it requires privileged Docker and systemd-in-container support.
 
 ## Tagging
 

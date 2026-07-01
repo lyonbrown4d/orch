@@ -289,6 +289,12 @@ tasks:
       - task release-snapshot
       - task smoke:local-raft-forwarding
 
+
+  release-gate:e2e:
+    desc: "Run extended full chain e2e smoke suite"
+    cmds:
+      - task smoke:full-chain-full
+
   release-gate:
     desc: "Run full beta release gate checks, including local container-runtime smoke tests"
     cmds:

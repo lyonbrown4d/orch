@@ -24,6 +24,7 @@ permissions:
 jobs:
   docker-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
@@ -49,8 +50,8 @@ jobs:
         run: |
           $fullSuite = '${{ github.event.inputs.full_stack }}' -eq 'true'
           $runtimeIsolation = '${{ github.event.inputs.runtime_isolation }}' -eq 'true'
-          $timeout = 360
           $rawTimeout = '${{ github.event.inputs.timeout_seconds }}'
+          $timeout = 360
 
           if (-not [string]::IsNullOrWhiteSpace($rawTimeout)) {
             try {
@@ -73,3 +74,38 @@ jobs:
             }
             & './scripts/docker-raft-app-smoke.ps1' @args
           }
+
+      - name: Collect smoke logs
+        if: always()
+        shell: pwsh
+        run: |
+          $artifactRoot = Join-Path (Get-Location) '.orch-e2e-artifacts'
+          Remove-Item -LiteralPath $artifactRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+
+          $logRoots = @(
+            '.orch-smoke/logs',
+            '.orch-worker-dispatch-smoke/logs',
+            '.orch-raft-smoke/logs'
+          )
+          foreach ($root in $logRoots) {
+            if (Test-Path $root) {
+              Copy-Item -LiteralPath $root -Destination $artifactRoot -Recurse -Force
+            }
+          }
+
+          Get-ChildItem -Force -Directory -Name '.orch-docker-raft-*' | ForEach-Object {
+            $root = Join-Path $_ 'logs'
+            if (Test-Path $root) {
+              Copy-Item -LiteralPath $root -Destination $artifactRoot -Recurse -Force
+            }
+          }
+
+      - name: Upload smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-e2e-logs-${{ github.run_id }}
+          path: .orch-e2e-artifacts
+          retention-days: 7
+          if-no-files-found: ignore

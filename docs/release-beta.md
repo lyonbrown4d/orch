@@ -108,21 +108,39 @@ task release-gate:local CLI_ARGS="-Runtime -E2E"
 
 You can run the manual release gate workflow through `workflow_dispatch` on `.github/workflows/release-gate.yml` with optional toggles. The workflow delegates to `task release-gate:local` with the corresponding args.
 
-`include_runtime` (enable container runtime checks)
-`include_e2e` (enable extended full-chain checks)
+`include_runtime` enables container runtime checks.
+`include_e2e` enables the extended full-chain e2e gate.
 
-Defaults: both off.
-
-Suggested patterns:
+Workflow input examples:
 
 ```yaml
+# Baseline only (same as task release-gate:static)
+include_runtime: false
+include_e2e: false
+```
+
+```yaml
+# Runtime smoke checks
+include_runtime: true
+include_e2e: false
+```
+
+```yaml
+# Full e2e (runtime + e2e) in one pass
 include_runtime: true
 include_e2e: true
 ```
 
+Execution mapping:
+
+```text
+include_runtime=false, include_e2e=false => task release-gate:local
+include_runtime=true,  include_e2e=false => task release-gate:local CLI_ARGS="-Runtime"
+include_runtime=true,  include_e2e=true  => task release-gate:local CLI_ARGS="-Runtime -E2E"
+include_runtime=false, include_e2e=true => task release-gate:local CLI_ARGS="-E2E"
+```
+
 When `include_runtime` is enabled, the workflow runs `task smoke:local-container-runtimes` after `task release-gate:static` and before optional `release-gate:e2e`.
-
-
 
 ## Tagging
 

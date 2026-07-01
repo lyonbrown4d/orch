@@ -106,7 +106,7 @@ task release-gate:local CLI_ARGS="-Runtime -E2E"
 
 ### Manual Gate Workflow
 
-You can run the manual release gate workflow through `workflow_dispatch` on `.github/workflows/release-gate.yml` with optional toggles:
+You can run the manual release gate workflow through `workflow_dispatch` on `.github/workflows/release-gate.yml` with optional toggles. The workflow delegates to `task release-gate:local` with the corresponding args.
 
 `include_runtime` (enable container runtime checks)
 `include_e2e` (enable extended full-chain checks)

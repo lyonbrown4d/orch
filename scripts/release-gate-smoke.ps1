@@ -10,7 +10,6 @@ Set-StrictMode -Version Latest
 
 if (-not $SkipBaseline) {
     Write-Host "[release-gate] Running baseline checks (release-gate:static)..."
-    go mod tidy
     task release-gate:static
 }
 else {

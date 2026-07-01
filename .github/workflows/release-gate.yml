@@ -35,16 +35,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman
 
-      - name: Run baseline release gate
+      - name: Run local release gate entrypoint
         shell: pwsh
-        run: task release-gate:static
+        run: |
+          $cliArgs = @()
 
-      - name: Run runtime smokes
-        if: github.event.inputs.include_runtime == 'true'
-        shell: pwsh
-        run: task smoke:local-container-runtimes
+          if ('${{ github.event.inputs.include_runtime }}' -eq 'true') {
+            $cliArgs += '-Runtime'
+          }
+          if ('${{ github.event.inputs.include_e2e }}' -eq 'true') {
+            $cliArgs += '-E2E'
+          }
 
-      - name: Run optional full e2e gate
-        if: github.event.inputs.include_e2e == 'true'
-        shell: pwsh
-        run: task release-gate:e2e
+          if ($cliArgs.Count -eq 0) {
+            task release-gate:local
+            return
+          }
+
+          task release-gate:local CLI_ARGS=$($cliArgs -join ' ')

@@ -15,10 +15,10 @@ param(
     [int]$TimeoutSeconds = 600,
     [switch]$SkipBuild,
     [switch]$SkipImageBuild,
+    [switch]$SkipStackLifecycle,
     [switch]$KeepCluster,
     [switch]$KeepWorkload
 )
-
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -41,6 +41,7 @@ function New-ScenarioConfig {
                 WorkloadNodes = @{ whoami = "node-b" }
                 WorkloadVolumes = @{ whoami = @("whoamiData") }
                 DescribeWorkload = "whoami"
+                EnableStackLifecycleOps = $true
             }
         }
         "rollout" {
@@ -57,6 +58,7 @@ function New-ScenarioConfig {
                 WorkloadNodes = @{ whoami = "node-b" }
                 WorkloadVolumes = @{}
                 DescribeWorkload = "whoami"
+                EnableStackLifecycleOps = $true
             }
         }
         "nextcloud" {
@@ -72,6 +74,7 @@ function New-ScenarioConfig {
                 WorkloadNodes = @{ postgres = "node-b"; redis = "node-b"; nextcloud = "node-b" }
                 WorkloadVolumes = @{ postgres = @("postgresData"); redis = @("redisData"); nextcloud = @("nextcloudData") }
                 DescribeWorkload = "nextcloud"
+                EnableStackLifecycleOps = $false
             }
         }
         "seaweed" {
@@ -97,6 +100,7 @@ function New-ScenarioConfig {
                 }
                 WorkloadVolumes = @{ seaweedvolumea = @("seaweedVolumeAData"); seaweedvolumeb = @("seaweedVolumeBData"); seaweedvolumec = @("seaweedVolumeCData") }
                 DescribeWorkload = "seaweedfilera"
+                EnableStackLifecycleOps = $false
             }
         }
         default {
@@ -808,7 +812,7 @@ function Invoke-RolloutOperations {
     Write-Host "Applying intentionally failing rollout manifest..."
     $failedAsExpected = $false
     try {
-        Invoke-Checked $cliBin @("--server", $leaderURL, "apply", "--file", $rolloutBadManifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
+        Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "apply", "--file", $rolloutBadManifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
     }
     catch {
         $failedAsExpected = $true
@@ -821,6 +825,47 @@ function Invoke-RolloutOperations {
     Wait-RolloutAutoRollback -LeaderNode $LeaderNode -ExpectedGeneration $stableGeneration
     Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "history", $appName, "-n", $namespace)
     Wait-PlacementIngress
+}
+function Invoke-StackLifecycleOperations {
+    param([Parameter(Mandatory = $true)]$LeaderNode)
+    if (-not $scenarioCfg.EnableStackLifecycleOps -or $SkipStackLifecycle) {
+        if (-not $scenarioCfg.EnableStackLifecycleOps) {
+            Write-Host ""
+            Write-Host "Skipping stack stop/start/restart lifecycle for scenario '$($scenarioCfg.Slug)' to avoid heavy disruption."
+        }
+        else {
+            Write-Host ""
+            Write-Host "Skipping stack stop/start/restart as requested."
+        }
+        return
+    }
+
+    $leaderURL = Node-URL $LeaderNode
+
+    Write-Host ""
+    Write-Host "Checking stack status: $namespace/$appName"
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "status", $appName, "-n", $namespace, "--json")
+
+    Write-Host ""
+    Write-Host "Stopping stack $appName through stack lifecycle"
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "stop", $appName, "-n", $namespace)
+    Invoke-Checked $cliBin @("--server", $leaderURL, "wait", "app", $appName, "-n", $namespace, "--for", "stopped", "--timeout", "$($TimeoutSeconds)s")
+
+    Write-Host ""
+    Write-Host "Starting stack $appName"
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "start", $appName, "-n", $namespace)
+    Invoke-Checked $cliBin @("--server", $leaderURL, "wait", "app", $appName, "-n", $namespace, "--for", "running", "--timeout", "$($TimeoutSeconds)s")
+    Wait-AssignmentsRunning -LeaderNode $LeaderNode
+    Wait-ScenarioIngress
+
+    Write-Host ""
+    Write-Host "Restarting stack $appName"
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "restart", $appName, "-n", $namespace)
+    Invoke-Checked $cliBin @("--server", $leaderURL, "wait", "app", $appName, "-n", $namespace, "--for", "running", "--timeout", "$($TimeoutSeconds)s")
+    Wait-AssignmentsRunning -LeaderNode $LeaderNode
+    Wait-ScenarioIngress
+
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "status", $appName, "-n", $namespace, "--json")
 }
 
 function Invoke-PlacementOperations {
@@ -1186,15 +1231,19 @@ try {
     Write-Host "Manifest:             $manifestPath"
     Write-Host ""
 
-    Write-Host "Deploying $namespace/$appName through orch-cli apply..."
-    Invoke-Checked $cliBin @("--server", $leaderURL, "apply", "--file", $manifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
+    Write-Host "Deploying $namespace/$appName through orch-cli stack apply..."
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "apply", "--file", $manifestPath, "--watch", "--timeout", "$($TimeoutSeconds)s")
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "status", $appName, "-n", $namespace, "--json")
     Write-Host "Waiting for readiness-gated app state through orch-cli wait..."
     Invoke-Checked $cliBin @("--server", $leaderURL, "wait", "app", $appName, "-n", $namespace, "--for", "running", "--timeout", "$($TimeoutSeconds)s")
     Wait-AssignmentsRunning -LeaderNode $leader
+    Write-Host "Checking stack status before ingress check for $($scenarioCfg.Slug)..."
+    Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "status", $appName, "-n", $namespace)
     Write-Host "Checking ingress routing for $($scenarioCfg.Slug)..."
     Wait-ScenarioIngress
     Invoke-RolloutOperations -LeaderNode $leader
     Invoke-PlacementOperations -LeaderNode $leader
+    Invoke-StackLifecycleOperations -LeaderNode $leader
 
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "apps")
     Invoke-Checked $cliBin @("--server", $leaderURL, "get", "assignments")
@@ -1204,7 +1253,7 @@ try {
     if (-not $KeepWorkload) {
         Write-Host ""
         Write-Host "Deleting $($scenarioCfg.Slug) app..."
-        Invoke-Checked $cliBin @("--server", $leaderURL, "delete", "app", $appName, "-n", $namespace)
+        Invoke-Checked $cliBin @("--server", $leaderURL, "stack", "delete", $appName, "-n", $namespace)
         Wait-AppDeleted -LeaderNode $leader
         Wait-VolumeBindingsReleased -LeaderNode $leader
         Wait-WorkloadContainersRemoved
@@ -1247,6 +1296,4 @@ finally {
         }
     }
 }
-
-
 

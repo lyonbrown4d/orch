@@ -10,9 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	dragonboat "github.com/lni/dragonboat/v4"
-	dbconfig "github.com/lni/dragonboat/v4/config"
-	sm "github.com/lni/dragonboat/v4/statemachine"
+	dragonboat "github.com/jeremyhahn/dragonboat/v4"
+	dbconfig "github.com/jeremyhahn/dragonboat/v4/config"
+	dbtan "github.com/jeremyhahn/dragonboat/v4/plugin/tan"
+	sm "github.com/jeremyhahn/dragonboat/v4/statemachine"
 
 	"github.com/lyonbrown4d/orch/internal/config"
 	"github.com/lyonbrown4d/orch/internal/logging"
@@ -164,6 +165,10 @@ func (s *Service) Start(ctx context.Context) error {
 		RTTMillisecond: 100,
 		RaftAddress:    raftAddr,
 		ListenAddress:  listenAddr,
+		Expert: dbconfig.ExpertConfig{
+			LogDBFactory: dbtan.Factory,
+			FS:           dragonboatFS(),
+		},
 	})
 	if err != nil {
 		return oopsx.B("raft").Wrapf(err, "dragonboat.NewNodeHost")

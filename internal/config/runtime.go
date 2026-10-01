@@ -118,7 +118,7 @@ func Load(opts ...configx.Option) (Config, error) {
 		),
 		configx.WithValidateLevel(configx.ValidateLevelNone),
 	)
-	return configx.LoadTErr[Config](append(base, opts...)...)
+	return configx.Load[Config](append(base, opts...)...)
 }
 
 func Default() Config {

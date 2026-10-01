@@ -58,9 +58,9 @@ func (s *Service) DesiredWorkload(meta deployv1.Metadata, workloadName string) (
 		return deployv1.Workload{}, false
 	}
 	name := strings.TrimSpace(workloadName)
-	return appWorkloadsForView(app).FirstWhere(func(_ int, workload deployv1.Workload) bool {
+	return list.FindList(appWorkloadsForView(app), func(_ int, workload deployv1.Workload) bool {
 		return strings.TrimSpace(workload.Name) == name
-	}).Get()
+	})
 }
 
 func (s *Service) ListApps() *list.List[AppView] {

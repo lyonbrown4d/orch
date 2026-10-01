@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	sm "github.com/lni/dragonboat/v4/statemachine"
+	sm "github.com/jeremyhahn/dragonboat/v4/statemachine"
 
 	"github.com/lyonbrown4d/orch/pkg/oopsx"
 )

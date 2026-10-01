@@ -1,5 +1,5 @@
-# Dev environment for orch (align with go.mod go 1.26+).
-FROM golang:1.26-bookworm
+# Dev environment for orch (align with go.mod go 1.27+).
+FROM golang:1.27-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
 	git \

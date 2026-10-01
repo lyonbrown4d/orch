@@ -56,7 +56,7 @@ func newGocronScheduler(sc config.SchedulerConfig, raft *raftsvc.Service) (gocro
 	}
 
 	if sc.MaxConcurrentJobs > 0 {
-		var mode gocron.LimitMode = gocron.LimitModeReschedule
+		mode := gocron.LimitModeReschedule
 		if strings.EqualFold(strings.TrimSpace(sc.ConcurrentJobsMode), "wait") {
 			mode = gocron.LimitModeWait
 		}

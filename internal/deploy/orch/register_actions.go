@@ -1,13 +1,12 @@
 package orch
 
 import (
-	"github.com/arcgolabs/collectionx/list"
 	"github.com/arcgolabs/plano/compiler"
 	"github.com/arcgolabs/plano/schema"
 )
 
-func orchActionSpecs() list.List[compiler.ActionSpec] {
-	return compiler.ActionSpecs(
+func orchActionSpecs() []compiler.ActionSpec {
+	return []compiler.ActionSpec{
 		compiler.ActionSpec{
 			Name:     "http",
 			MinArgs:  1,
@@ -36,5 +35,5 @@ func orchActionSpecs() list.List[compiler.ActionSpec] {
 			ArgTypes: schema.Types(schema.TypeInt, schema.TypeString, schema.TypeString, schema.TypeInt, schema.TypeString),
 			Docs:     `Declare an endpoint with protocol: port(5432, "tcp"), port(5432, "tcp", "postgres"), or port(5432, "tcp", "postgres", 5432).`,
 		},
-	)
+	}
 }

@@ -50,8 +50,7 @@ func readEncapPacket(ctx context.Context, log *slog.Logger, pc net.PacketConn, b
 }
 
 func handleEncapReadError(ctx context.Context, log *slog.Logger, err error, message string) {
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr != nil {
 		return
 	}
 	if ctx.Err() != nil {

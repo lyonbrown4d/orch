@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	dblogger "github.com/lni/dragonboat/v4/logger"
+	dblogger "github.com/jeremyhahn/dragonboat/v4/logger"
 
 	"github.com/lyonbrown4d/orch/internal/logging"
 )

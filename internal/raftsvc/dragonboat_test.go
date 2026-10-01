@@ -1,6 +1,6 @@
 package raftsvc_test
 
-import "github.com/lni/dragonboat/v4/logger"
+import "github.com/jeremyhahn/dragonboat/v4/logger"
 
 func init() {
 	for _, pkg := range []string{"config", "dragonboat", "logdb", "raft", "rsm", "transport"} {

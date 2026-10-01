@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	dblogger "github.com/lni/dragonboat/v4/logger"
+	dblogger "github.com/jeremyhahn/dragonboat/v4/logger"
 )
 
 var installDragonboatLoggerOnce sync.Once

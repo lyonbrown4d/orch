@@ -205,7 +205,7 @@ Full matrix builds must succeed (`go test ./...` and cross-compiles); narrow `bu
 
 ### Dev Container (VS Code / Cursor / Codespaces)
 
-Open the repo in a container using `.devcontainer/`: Go 1.26 (bookworm), `task`, Delve, and the **Docker CLI** are preinstalled; port `17443` is forwarded for `orch-server` HTTP. After the container builds, `postCreateCommand` runs `go mod download` and `docker version`. For mdBook locally, install a [release binary](https://github.com/rust-lang/mdBook/releases) or use mdBook on the host.
+Open the repo in a container using `.devcontainer/`: Go 1.27 (bookworm), `task`, Delve, and the **Docker CLI** are preinstalled; port `17443` is forwarded for `orch-server` HTTP. After the container builds, `postCreateCommand` runs `go mod download` and `docker version`. For mdBook locally, install a [release binary](https://github.com/rust-lang/mdBook/releases) or use mdBook on the host.
 
 **Docker vs nested runtimes**
 

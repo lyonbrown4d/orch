@@ -29,7 +29,7 @@ func newAppViewHarness() appViewHarness {
 
 func TestListAppsAggregatesAssignmentStatus(t *testing.T) {
 	harness := newAppViewHarness()
-	app := appViewDemo("demo", appViewDockerWorkload("api", "api"), appViewDockerWorkload("worker", "worker"))
+	app := appViewDemo(appViewDockerWorkload("api", "api"), appViewDockerWorkload("worker", "worker"))
 	harness.applyApp(t, app)
 	harness.requirePendingApp(t, app.Metadata, 2)
 
@@ -45,7 +45,7 @@ func TestListAppsAggregatesAssignmentStatus(t *testing.T) {
 
 func TestListAppsTreatsStaleAssignmentsAsPending(t *testing.T) {
 	harness := newAppViewHarness()
-	app := appViewDemo("demo", appViewDockerWorkload("api", "api:v2"))
+	app := appViewDemo(appViewDockerWorkload("api", "api:v2"))
 	harness.applyApp(t, app)
 	harness.applyAssignment(t, app, "api", "api:v1", workloadmeta.AssignmentStatusRunning, "old", time.Now().UTC())
 
@@ -59,7 +59,7 @@ func TestListAppsTreatsStaleAssignmentsAsPending(t *testing.T) {
 
 func TestListAppsTreatsMissingGenerationAsPending(t *testing.T) {
 	harness := newAppViewHarness()
-	app := appViewDemo("demo", appViewDockerWorkload("api", "api:v1"))
+	app := appViewDemo(appViewDockerWorkload("api", "api:v1"))
 	harness.applyApp(t, app)
 	harness.applyAssignment(t, app, "api", "api:v1", workloadmeta.AssignmentStatusRunning, "", time.Now().UTC())
 
@@ -73,8 +73,8 @@ func TestListAppsTreatsMissingGenerationAsPending(t *testing.T) {
 
 func TestListAppsIncludesRevisionSummary(t *testing.T) {
 	harness := newAppViewHarness()
-	appV1 := appViewDemo("demo", appViewDockerWorkload("api", "api:v1"))
-	appV2 := appViewDemo("demo", appViewDockerWorkload("api", "api:v2"))
+	appV1 := appViewDemo(appViewDockerWorkload("api", "api:v1"))
+	appV2 := appViewDemo(appViewDockerWorkload("api", "api:v2"))
 	harness.applyApp(t, appV1)
 	harness.applyApp(t, appV2)
 
@@ -84,9 +84,9 @@ func TestListAppsIncludesRevisionSummary(t *testing.T) {
 	}
 }
 
-func appViewDemo(name string, workloads ...deployv1.Workload) deployv1.App {
+func appViewDemo(workloads ...deployv1.Workload) deployv1.App {
 	return deployv1.App{
-		Metadata:  deployv1.Metadata{Name: name, Namespace: "default"},
+		Metadata:  deployv1.Metadata{Name: "demo", Namespace: "default"},
 		Workloads: workloads,
 	}
 }

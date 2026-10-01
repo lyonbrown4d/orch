@@ -33,20 +33,16 @@ func AttachFiberPrometheus(app *fiber.App, cfg config.Config, obs *observability
 	}
 
 	handler := fiberprometheus.New(fiberprometheus.Config{
-		Service:                 serviceName,
+		ServiceName:             serviceName,
 		Namespace:               "http",
 		Subsystem:               "fiber",
+		MetricsPath:             path,
 		Registerer:              reg,
 		Gatherer:                reg,
 		DisableGoCollector:      true,
 		DisableProcessCollector: true,
-		SkipURIs:                []string{path},
-		Next: func(c fiber.Ctx) bool {
-			return normalizeHTTPPath(c.Path()) == path
-		},
 	})
 	app.Use(handler)
-	app.Use(path, handler)
 }
 
 func normalizeHTTPPath(path string) string {
